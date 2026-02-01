@@ -95,6 +95,11 @@ stages:
         pool:
           name: 'Default'
         steps:
+          - task: ManualValidation@0
+            displayName: 'Wait for approval to generate build artifact'
+            inputs:
+              instructions: 'Approve to generate and publish the build artifact output'
+              onTimeout: 'reject'
           - task: PowerShell@2
             displayName: 'Get latest CI run and artifact version from all repos'
             env:
@@ -175,3 +180,55 @@ stages:
               targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
               artifactName: 'ci-build-info'
               publishLocation: 'pipeline'
+
+  - stage: stage_east_deploy
+    displayName: 'Stage East Deploy'
+    dependsOn: GatherCIBuildInfo
+    jobs:
+      - job: DeployEast
+        displayName: 'Deploy to Stage East'
+        pool:
+          name: 'Default'
+        steps:
+          - script: echo "Dummy stage-east-deploy - deploy to East region"
+            displayName: 'Stage East Deploy'
+
+  - stage: stage_west_deploy
+    displayName: 'Stage West Deploy'
+    dependsOn: GatherCIBuildInfo
+    jobs:
+      - job: DeployWest
+        displayName: 'Deploy to Stage West'
+        pool:
+          name: 'Default'
+        steps:
+          - script: echo "Dummy stage-west-deploy - deploy to West region"
+            displayName: 'Stage West Deploy'
+
+  - stage: prod_east_deploy
+    displayName: 'Prod East Deploy'
+    dependsOn:
+      - stage_east_deploy
+      - stage_west_deploy
+    jobs:
+      - job: DeployProdEast
+        displayName: 'Deploy to Prod East'
+        pool:
+          name: 'Default'
+        steps:
+          - script: echo "Dummy prod-east-deploy - deploy to Prod East region"
+            displayName: 'Prod East Deploy'
+
+  - stage: prod_west_deploy
+    displayName: 'Prod West Deploy'
+    dependsOn:
+      - stage_east_deploy
+      - stage_west_deploy
+    jobs:
+      - job: DeployProdWest
+        displayName: 'Deploy to Prod West'
+        pool:
+          name: 'Default'
+        steps:
+          - script: echo "Dummy prod-west-deploy - deploy to Prod West region"
+            displayName: 'Prod West Deploy'
