@@ -1,6 +1,10 @@
 # Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
 # Run this pipeline and provide the branch name when prompted.
 
+pool:
+  name: 'Default'   # or whatever you named your self-hosted pool
+  demands: []      # optional
+
 trigger: none
 
 parameters:
