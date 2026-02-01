@@ -86,100 +86,99 @@ stages:
                 }
                 Write-Host "`nDone. Branch '$branchName' is now in all 10 repos." -ForegroundColor Cyan
 
+  # Stage 3: Requires approval before generating artifact.
+  # Create environment 'ci-build-approval' in DevOps (Pipelines > Environments) and add Approvals.
   - stage: GatherCIBuildInfo
     displayName: 'Gather CI build info from all repos'
     dependsOn: CreateBranch
     jobs:
-      - job: GatherBuildInfo
+      - deployment: GatherBuildInfo
         displayName: 'Latest CI run and artifact version per repo'
-        pool:
-          name: 'Default'
-        steps:
-          - task: ManualValidation@0
-            displayName: 'Wait for approval to generate build artifact'
-            inputs:
-              instructions: 'Approve to generate and publish the build artifact output'
-              onTimeout: 'reject'
-          - task: PowerShell@2
-            displayName: 'Get latest CI run and artifact version from all repos'
-            env:
-              GITHUB_TOKEN: $(GITHUB_TOKEN)
-            inputs:
-              targetType: 'inline'
-              script: |
-                $ErrorActionPreference = "Stop"
-                $owner = "${{ parameters.githubOwner }}"
-                $repos = @("repo-1","repo-2","repo-3","repo-4","repo-5","repo-6","repo-7","repo-8","repo-9","repo-10")
-                $baseUrl = "https://api.github.com"
-                $outputLines = @()
+        environment: 'ci-build-approval'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: PowerShell@2
+                  displayName: 'Get latest CI run and artifact version from all repos'
+                  env:
+                    GITHUB_TOKEN: $(GITHUB_TOKEN)
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $ErrorActionPreference = "Stop"
+                      $owner = "${{ parameters.githubOwner }}"
+                      $repos = @("repo-1","repo-2","repo-3","repo-4","repo-5","repo-6","repo-7","repo-8","repo-9","repo-10")
+                      $baseUrl = "https://api.github.com"
+                      $outputLines = @()
 
-                if (-not $env:GITHUB_TOKEN) {
-                  Write-Error "GITHUB_TOKEN is not set. Add a secret pipeline variable (scope: repo + actions read)."
-                }
-
-                $headers = @{
-                  "Authorization" = "token $($env:GITHUB_TOKEN)"
-                  "Accept"        = "application/vnd.github.v3+json"
-                }
-
-                foreach ($repo in $repos) {
-                  try {
-                    # Get workflow id for CI (ci.yml)
-                    $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
-                    $ciWorkflow = $workflows.workflows | Where-Object { $_.path -like "*ci.yml" } | Select-Object -First 1
-                    if (-not $ciWorkflow) {
-                      $outputLines += "$repo - no CI workflow found"
-                      Write-Host "$repo - no CI workflow found" -ForegroundColor Yellow
-                      continue
-                    }
-                    $workflowId = $ciWorkflow.id
-                    # Get latest CI workflow runs
-                    $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=1" -Headers $headers -Method Get
-                    if (-not $runs.workflow_runs -or $runs.workflow_runs.Count -eq 0) {
-                      $outputLines += "$repo - no CI run found"
-                      Write-Host "$repo - no CI run found" -ForegroundColor Yellow
-                      continue
-                    }
-                    $latestRun = $runs.workflow_runs[0]
-                    $runId = $latestRun.id
-                    $runStatus = $latestRun.status
-                    $runConclusion = $latestRun.conclusion
-
-                    # Get artifacts for latest run
-                    $artifacts = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/artifacts" -Headers $headers -Method Get
-                    $buildVersion = "no artifact"
-                    if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
-                      $buildArtifact = $artifacts.artifacts | Where-Object { $_.name -match "^build-" } | Select-Object -First 1
-                      if ($buildArtifact) {
-                        $buildVersion = $buildArtifact.name -replace "^build-", ""
-                      } else {
-                        $buildVersion = $artifacts.artifacts[0].name
+                      if (-not $env:GITHUB_TOKEN) {
+                        Write-Error "GITHUB_TOKEN is not set. Add a secret pipeline variable (scope: repo + actions read)."
                       }
-                    }
 
-                    $line = "$repo - $buildVersion"
-                    $outputLines += $line
-                    Write-Host "$line (run: $runId, status: $runStatus, conclusion: $runConclusion)" -ForegroundColor Green
-                  } catch {
-                    $outputLines += "$repo - error: $($_.Exception.Message)"
-                    Write-Host "Failed for $repo : $_" -ForegroundColor Red
-                  }
-                }
+                      $headers = @{
+                        "Authorization" = "token $($env:GITHUB_TOKEN)"
+                        "Accept"        = "application/vnd.github.v3+json"
+                      }
 
-                # Write output file
-                $outDir = "$(Build.ArtifactStagingDirectory)/ci-build-info"
-                New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-                $outFile = Join-Path $outDir "all-repos-build-info.txt"
-                $outputLines | Set-Content -Path $outFile -Encoding UTF8
-                Write-Host "`nOutput file: $outFile" -ForegroundColor Cyan
-                Get-Content $outFile
+                      foreach ($repo in $repos) {
+                        try {
+                          # Get workflow id for CI (ci.yml)
+                          $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+                          $ciWorkflow = $workflows.workflows | Where-Object { $_.path -like "*ci.yml" } | Select-Object -First 1
+                          if (-not $ciWorkflow) {
+                            $outputLines += "$repo - no CI workflow found"
+                            Write-Host "$repo - no CI workflow found" -ForegroundColor Yellow
+                            continue
+                          }
+                          $workflowId = $ciWorkflow.id
+                          # Get latest CI workflow runs
+                          $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=1" -Headers $headers -Method Get
+                          if (-not $runs.workflow_runs -or $runs.workflow_runs.Count -eq 0) {
+                            $outputLines += "$repo - no CI run found"
+                            Write-Host "$repo - no CI run found" -ForegroundColor Yellow
+                            continue
+                          }
+                          $latestRun = $runs.workflow_runs[0]
+                          $runId = $latestRun.id
+                          $runStatus = $latestRun.status
+                          $runConclusion = $latestRun.conclusion
 
-          - task: PublishPipelineArtifact@1
-            displayName: 'Publish build info file'
-            inputs:
-              targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
-              artifactName: 'ci-build-info'
-              publishLocation: 'pipeline'
+                          # Get artifacts for latest run
+                          $artifacts = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/artifacts" -Headers $headers -Method Get
+                          $buildVersion = "no artifact"
+                          if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
+                            $buildArtifact = $artifacts.artifacts | Where-Object { $_.name -match "^build-" } | Select-Object -First 1
+                            if ($buildArtifact) {
+                              $buildVersion = $buildArtifact.name -replace "^build-", ""
+                            } else {
+                              $buildVersion = $artifacts.artifacts[0].name
+                            }
+                          }
+
+                          $line = "$repo - $buildVersion"
+                          $outputLines += $line
+                          Write-Host "$line (run: $runId, status: $runStatus, conclusion: $runConclusion)" -ForegroundColor Green
+                        } catch {
+                          $outputLines += "$repo - error: $($_.Exception.Message)"
+                          Write-Host "Failed for $repo : $_" -ForegroundColor Red
+                        }
+                      }
+
+                      # Write output file
+                      $outDir = "$(Build.ArtifactStagingDirectory)/ci-build-info"
+                      New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+                      $outFile = Join-Path $outDir "all-repos-build-info.txt"
+                      $outputLines | Set-Content -Path $outFile -Encoding UTF8
+                      Write-Host "`nOutput file: $outFile" -ForegroundColor Cyan
+                      Get-Content $outFile
+
+                - task: PublishPipelineArtifact@1
+                  displayName: 'Publish build info file'
+                  inputs:
+                    targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
+                    artifactName: 'ci-build-info'
+                    publishLocation: 'pipeline'
 
   - stage: stage_east_deploy
     displayName: 'Stage East Deploy'
