@@ -23,7 +23,7 @@ stages:
       - job: ValidateInputs
         displayName: 'Check parameters'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - script: |
               echo "Branch name: ${{ parameters.branchName }}"
@@ -37,7 +37,7 @@ stages:
       - job: CreateBranchInAllRepos
         displayName: 'Create branch across repo-1 to repo-10'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - task: PowerShell@2
             displayName: 'Create branch in all 10 repos'
@@ -96,7 +96,7 @@ stages:
         displayName: 'Latest CI run and artifact version per repo'
         environment: 'ci-build-approval'
         pool:
-          name: 'agent1'
+          name: 'Default'
         strategy:
           runOnce:
             deploy:
@@ -189,7 +189,7 @@ stages:
       - job: DeployEast
         displayName: 'Deploy to Stage East'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - script: echo "Dummy stage-east-deploy - deploy to East region"
             displayName: 'Stage East Deploy'
@@ -201,7 +201,7 @@ stages:
       - job: DeployWest
         displayName: 'Deploy to Stage West'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - script: echo "Dummy stage-west-deploy - deploy to West region"
             displayName: 'Stage West Deploy'
@@ -215,7 +215,7 @@ stages:
       - job: DeployProdEast
         displayName: 'Deploy to Prod East'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - script: echo "Dummy prod-east-deploy - deploy to Prod East region"
             displayName: 'Prod East Deploy'
@@ -229,7 +229,7 @@ stages:
       - job: DeployProdWest
         displayName: 'Deploy to Prod West'
         pool:
-          name: 'agent1'
+          name: 'Default'
         steps:
           - script: echo "Dummy prod-west-deploy - deploy to Prod West region"
             displayName: 'Prod West Deploy'
