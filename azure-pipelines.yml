@@ -1,10 +1,6 @@
 # Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
 # Run this pipeline and provide the branch name when prompted.
 
-pool:
-  name: 'Default'   # or whatever you named your self-hosted pool
-  demands: []      # optional
-
 trigger: none
 
 parameters:
@@ -27,7 +23,7 @@ stages:
       - job: CreateBranchInAllRepos
         displayName: 'Create branch across repo-1 to repo-10'
         pool:
-          vmImage: 'ubuntu-latest'
+          name: 'agent1'
         steps:
           - task: PowerShell@2
             displayName: 'Create branch in all 10 repos'
@@ -56,4 +52,22 @@ stages:
 
                 foreach ($repo in $repos) {
                   try {
-                    # Get default branch and its
+                    # Get default branch and its SHA
+                    $repoInfo = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo" -Headers $headers -Method Get
+                    $defaultBranch = $repoInfo.default_branch
+                    $refInfo = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/ref/heads/$defaultBranch" -Headers $headers -Method Get
+                    $sha = $refInfo.object.sha
+
+                    # Create new branch
+                    $body = @{ ref = "refs/heads/$branchName"; sha = $sha } | ConvertTo-Json
+                    Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/refs" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+                    Write-Host "Created branch '$branchName' in $repo" -ForegroundColor Green
+                  } catch {
+                    if ($_.Exception.Response.StatusCode -eq 422) {
+                      Write-Host "Branch '$branchName' already exists in $repo (skipped)" -ForegroundColor Yellow
+                    } else {
+                      Write-Host "Failed for $repo : $_" -ForegroundColor Red
+                    }
+                  }
+                }
+                Write-Host "`nDone. Branch '$branchName' is now in all 10 repos." -ForegroundColor Cyan
