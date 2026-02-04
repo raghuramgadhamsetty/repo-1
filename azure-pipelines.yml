@@ -13,6 +13,10 @@ parameters:
   - name: prevReleaseBranch
     displayName: 'Previous release branch (create new branch from this)'
     type: string
+    default: main
+    values:
+      - main
+      - master
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
