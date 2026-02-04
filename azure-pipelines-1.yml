@@ -7,18 +7,24 @@ appendCommitMessageToRunName: false
 trigger: none
 
 parameters:
-  - name: prevReleaseBranch
+  - name: PrevReleaseBranch
     displayName: 'Branch name for artifacts to be pickedup'
     type: string
-  - name: Components need to deployed
+  - name: Components
     displayName: 'select Components need to deployed'
     type: stringList
     default: main
     values:
-      - main
-      - master
-      - NA
-      - NA
+      - ApplicationComponent1
+      - ApplicationComponent2
+      - ApplicationComponent3
+      - ApplicationComponent4
+      - ApplicationComponent5
+      - ApplicationComponent6
+      - ApplicationComponent7
+      - ApplicationComponent8
+      - ApplicationComponent9
+      - ApplicationComponent10
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
