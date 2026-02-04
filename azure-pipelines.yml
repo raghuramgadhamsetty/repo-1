@@ -263,7 +263,7 @@ stages:
                           Write-Host "Failed to trigger $repo : $_" -ForegroundColor Red
                         }
                       }
-                      Write-Host "`n$region: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
+                      Write-Host "`n${region}: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
 
   - stage: stage_west_deploy
     displayName: 'Stage West Deploy'
@@ -326,7 +326,7 @@ stages:
                           Write-Host "Failed to trigger $repo : $_" -ForegroundColor Red
                         }
                       }
-                      Write-Host "`n$region: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
+                      Write-Host "`n${region}: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
 
   - stage: prod_east_deploy
     displayName: 'Prod East Deploy'
@@ -391,7 +391,7 @@ stages:
                           Write-Host "Failed to trigger $repo : $_" -ForegroundColor Red
                         }
                       }
-                      Write-Host "`n$region: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
+                      Write-Host "`n${region}: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
 
   - stage: prod_west_deploy
     displayName: 'Prod West Deploy'
@@ -456,4 +456,4 @@ stages:
                           Write-Host "Failed to trigger $repo : $_" -ForegroundColor Red
                         }
                       }
-                      Write-Host "`n$region: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
+                      Write-Host "`n${region}: Triggered $triggered repos, skipped $skipped (NA)" -ForegroundColor Cyan
