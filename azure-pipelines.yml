@@ -11,27 +11,6 @@ parameters:
     displayName: 'GitHub owner/username'
     type: string
     default: 'raghuramgadhamsetty'
-  - name: stageRegion
-    displayName: 'Stage deploy region'
-    type: string
-    default: 'east'
-    values:
-      - east
-      - west
-  - name: prodRegion
-    displayName: 'Prod deploy region'
-    type: string
-    default: 'east'
-    values:
-      - east
-      - west
-  - name: dbTaskEnabled
-    displayName: 'DB task enabled'
-    type: string
-    default: 'no'
-    values:
-      - yes
-      - no
 
 variables:
   - name: repoList
@@ -49,9 +28,6 @@ stages:
           - script: |
               echo "Branch name: ${{ parameters.branchName }}"
               echo "GitHub owner: ${{ parameters.githubOwner }}"
-              echo "Stage region: ${{ parameters.stageRegion }}"
-              echo "Prod region: ${{ parameters.prodRegion }}"
-              echo "DB task enabled: ${{ parameters.dbTaskEnabled }}"
             displayName: 'Show parameters'
 
   - stage: CreateBranch
@@ -205,76 +181,3 @@ stages:
                     targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
                     artifactName: 'ci-build-info'
                     publishLocation: 'pipeline'
-
-  # Stage deploy: only east OR west runs. Pauses for approval. DB task based on dbTaskEnabled.
-  # Create environment 'deploy-approval' in DevOps (Pipelines > Environments) and add Approvals.
-  - stage: StageDeploy
-    displayName: 'Stage Deploy'
-    dependsOn: GatherCIBuildInfo
-    jobs:
-      - deployment: DeployStageEast
-        displayName: 'Deploy to Stage East'
-        condition: ${{ eq(parameters.stageRegion, 'east') }}
-        environment: 'deploy-approval'
-        pool:
-          name: 'Default'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - script: echo "Dummy stage-east-deploy - deploy to East region"
-                  displayName: 'Stage East Deploy'
-                - script: echo "DB task - stage east"
-                  displayName: 'DB task (stage east)'
-                  condition: ${{ eq(parameters.dbTaskEnabled, 'yes') }}
-      - deployment: DeployStageWest
-        displayName: 'Deploy to Stage West'
-        condition: ${{ eq(parameters.stageRegion, 'west') }}
-        environment: 'deploy-approval'
-        pool:
-          name: 'Default'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - script: echo "Dummy stage-west-deploy - deploy to West region"
-                  displayName: 'Stage West Deploy'
-                - script: echo "DB task - stage west"
-                  displayName: 'DB task (stage west)'
-                  condition: ${{ eq(parameters.dbTaskEnabled, 'yes') }}
-
-  # Prod deploy: only east OR west runs. Pauses for approval. DB task based on dbTaskEnabled.
-  - stage: ProdDeploy
-    displayName: 'Prod Deploy'
-    dependsOn: StageDeploy
-    jobs:
-      - deployment: DeployProdEast
-        displayName: 'Deploy to Prod East'
-        condition: ${{ eq(parameters.prodRegion, 'east') }}
-        environment: 'deploy-approval'
-        pool:
-          name: 'Default'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - script: echo "Dummy prod-east-deploy - deploy to Prod East region"
-                  displayName: 'Prod East Deploy'
-                - script: echo "DB task - prod east"
-                  displayName: 'DB task (prod east)'
-                  condition: ${{ eq(parameters.dbTaskEnabled, 'yes') }}
-      - deployment: DeployProdWest
-        displayName: 'Deploy to Prod West'
-        condition: ${{ eq(parameters.prodRegion, 'west') }}
-        environment: 'deploy-approval'
-        pool:
-          name: 'Default'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - script: echo "Dummy prod-west-deploy - deploy to Prod West region"
-                  displayName: 'Prod West Deploy'
-                - script: echo "DB task - prod west"
-                  displayName: 'DB task (prod west)'
-                  condition: ${{ eq(parameters.dbTaskEnabled, 'yes') }}
