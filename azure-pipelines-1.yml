@@ -44,7 +44,6 @@ stages:
         steps:
           - script: |
               echo "Branch name: ${{ parameters.PrevReleaseBranch }}"
-              echo "Previous release branch: ${{ parameters.Components }}"
               echo "GitHub owner: ${{ parameters.githubOwner }}"
             displayName: 'Show parameters'
 
