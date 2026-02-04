@@ -30,26 +30,7 @@ parameters:
     type: string
     default: 'raghuramgadhamsetty'
 
-variables:
-  - name: repoList
-    value: 'repo-1,repo-2,repo-3,repo-4,repo-5,repo-6,repo-7,repo-8,repo-9,repo-10'
-
-stages:
-  - stage: Validate
-    displayName: 'Validate inputs'
-    jobs:
-      - job: ValidateInputs
-        displayName: 'Check parameters'
-        pool:
-          name: 'Default'
-        steps:
-          - script: |
-              echo "Branch name: ${{ parameters.branchName }}"
-              echo "Previous release branch: ${{ parameters.prevReleaseBranch }}"
-              echo "GitHub owner: ${{ parameters.githubOwner }}"
-            displayName: 'Show parameters'
-
-  # Stage 3: Requires approval before generating artifact.
+  # Stage 1: Requires approval before generating artifact.
   # Create environment 'ci-build-approval' in DevOps (Pipelines > Environments) and add Approvals.
   - stage: GatherCIBuildInfo
     displayName: 'Gather CI build info from all repos'
