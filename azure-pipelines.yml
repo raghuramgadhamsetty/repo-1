@@ -1,6 +1,9 @@
 # Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
 # Run this pipeline and provide the branch name when prompted.
 
+name: ReleasePipeline-$(Build.BuildNumber)-$(Date:yyyyMMddHHmmss)
+appendCommitMessageToRunName: false
+
 trigger: none
 
 parameters:
