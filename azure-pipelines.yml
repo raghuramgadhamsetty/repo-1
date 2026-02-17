@@ -28,7 +28,7 @@ parameters:
   - name: repo1BuildVersion
     displayName: 'repo-1 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo2Enabled
     displayName: 'Component repo-2'
     type: boolean
@@ -36,7 +36,7 @@ parameters:
   - name: repo2BuildVersion
     displayName: 'repo-2 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo3Enabled
     displayName: 'Component repo-3'
     type: boolean
@@ -44,7 +44,7 @@ parameters:
   - name: repo3BuildVersion
     displayName: 'repo-3 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo4Enabled
     displayName: 'Component repo-4'
     type: boolean
@@ -52,7 +52,7 @@ parameters:
   - name: repo4BuildVersion
     displayName: 'repo-4 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo5Enabled
     displayName: 'Component repo-5'
     type: boolean
@@ -60,7 +60,7 @@ parameters:
   - name: repo5BuildVersion
     displayName: 'repo-5 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo6Enabled
     displayName: 'Component repo-6'
     type: boolean
@@ -68,7 +68,7 @@ parameters:
   - name: repo6BuildVersion
     displayName: 'repo-6 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo7Enabled
     displayName: 'Component repo-7'
     type: boolean
@@ -76,7 +76,7 @@ parameters:
   - name: repo7BuildVersion
     displayName: 'repo-7 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo8Enabled
     displayName: 'Component repo-8'
     type: boolean
@@ -84,7 +84,7 @@ parameters:
   - name: repo8BuildVersion
     displayName: 'repo-8 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo9Enabled
     displayName: 'Component repo-9'
     type: boolean
@@ -92,7 +92,7 @@ parameters:
   - name: repo9BuildVersion
     displayName: 'repo-9 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: repo10Enabled
     displayName: 'Component repo-10'
     type: boolean
@@ -100,7 +100,7 @@ parameters:
   - name: repo10BuildVersion
     displayName: 'repo-10 Build version (optional)'
     type: string
-    default: ''
+    default: ' '
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
