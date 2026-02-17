@@ -25,42 +25,82 @@ parameters:
     displayName: 'Component repo-1'
     type: boolean
     default: true
+  - name: repo1BuildVersion
+    displayName: 'repo-1 Build version (optional)'
+    type: string
+    default: ''
   - name: repo2Enabled
     displayName: 'Component repo-2'
     type: boolean
     default: true
+  - name: repo2BuildVersion
+    displayName: 'repo-2 Build version (optional)'
+    type: string
+    default: ''
   - name: repo3Enabled
     displayName: 'Component repo-3'
     type: boolean
     default: true
+  - name: repo3BuildVersion
+    displayName: 'repo-3 Build version (optional)'
+    type: string
+    default: ''
   - name: repo4Enabled
     displayName: 'Component repo-4'
     type: boolean
     default: true
+  - name: repo4BuildVersion
+    displayName: 'repo-4 Build version (optional)'
+    type: string
+    default: ''
   - name: repo5Enabled
     displayName: 'Component repo-5'
     type: boolean
     default: true
+  - name: repo5BuildVersion
+    displayName: 'repo-5 Build version (optional)'
+    type: string
+    default: ''
   - name: repo6Enabled
     displayName: 'Component repo-6'
     type: boolean
     default: true
+  - name: repo6BuildVersion
+    displayName: 'repo-6 Build version (optional)'
+    type: string
+    default: ''
   - name: repo7Enabled
     displayName: 'Component repo-7'
     type: boolean
     default: true
+  - name: repo7BuildVersion
+    displayName: 'repo-7 Build version (optional)'
+    type: string
+    default: ''
   - name: repo8Enabled
     displayName: 'Component repo-8'
     type: boolean
     default: true
+  - name: repo8BuildVersion
+    displayName: 'repo-8 Build version (optional)'
+    type: string
+    default: ''
   - name: repo9Enabled
     displayName: 'Component repo-9'
     type: boolean
     default: true
+  - name: repo9BuildVersion
+    displayName: 'repo-9 Build version (optional)'
+    type: string
+    default: ''
   - name: repo10Enabled
     displayName: 'Component repo-10'
     type: boolean
     default: true
+  - name: repo10BuildVersion
+    displayName: 'repo-10 Build version (optional)'
+    type: string
+    default: ''
 
 variables:
   - name: repoList
@@ -213,8 +253,27 @@ stages:
 
                       $branchEncoded = [System.Uri]::EscapeDataString($branchName)
 
+                      $buildVersionOverride = @{
+                        "repo-1" = "${{ parameters.repo1BuildVersion }}"
+                        "repo-2" = "${{ parameters.repo2BuildVersion }}"
+                        "repo-3" = "${{ parameters.repo3BuildVersion }}"
+                        "repo-4" = "${{ parameters.repo4BuildVersion }}"
+                        "repo-5" = "${{ parameters.repo5BuildVersion }}"
+                        "repo-6" = "${{ parameters.repo6BuildVersion }}"
+                        "repo-7" = "${{ parameters.repo7BuildVersion }}"
+                        "repo-8" = "${{ parameters.repo8BuildVersion }}"
+                        "repo-9" = "${{ parameters.repo9BuildVersion }}"
+                        "repo-10" = "${{ parameters.repo10BuildVersion }}"
+                      }
+
                       foreach ($repo in $repos) {
                         try {
+                          $override = $buildVersionOverride[$repo]
+                          if ($override -and $override.Trim() -ne "") {
+                            $outputLines += "$repo - $override"
+                            Write-Host "$repo - $override (from input)" -ForegroundColor Green
+                            continue
+                          }
                           # Get workflow id for CI (ci.yml)
                           $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
                           $ciWorkflow = $workflows.workflows | Where-Object { $_.path -like "*ci.yml" } | Select-Object -First 1
