@@ -21,6 +21,7 @@ parameters:
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
+    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
