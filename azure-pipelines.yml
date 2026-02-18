@@ -21,7 +21,6 @@ parameters:
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
-    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
@@ -260,6 +259,7 @@ stages:
                     targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
                     artifactName: 'ci-build-info'
                     publishLocation: 'pipeline'
+                    replaceExisting: true
 
   - stage: Promote
     displayName: 'Promote'
