@@ -1,5 +1,5 @@
 # Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
-# Run this pipeline and provide the variable group name. All other values (branchName, githubOwner, repo enabled/build version, prodActiveRegion) come from that variable group. Update the variable group in Pipelines > Library to change values when rerunning a stage.
+# Pipeline inputs: variable group name, branchName, prevReleaseBranch, githubOwner, prodActiveRegion. Repo enabled/build version come from the variable group.
 
 name: ReleasePipeline-$(Build.BuildId)-$(Date:yyyyMMddHHmmss)
 appendCommitMessageToRunName: false
@@ -10,9 +10,34 @@ parameters:
   - name: variableGroupName
     displayName: 'Variable group name'
     type: string
+  - name: branchName
+    displayName: 'Branch name to create'
+    type: string
+  - name: prevReleaseBranch
+    displayName: 'Previous release branch (create new branch from this)'
+    type: string
+    default: main
+  - name: githubOwner
+    displayName: 'GitHub owner/username'
+    type: string
+  - name: prodActiveRegion
+    displayName: 'Prod active region'
+    type: string
+    default: 'EAST-ACTIVE-WEST-PASSIVE'
+    values:
+      - 'EAST-ACTIVE-WEST-PASSIVE'
+      - 'WEST-ACTIVE-EAST-PASSIVE'
 
 variables:
   - group: ${{ parameters.variableGroupName }}
+  - name: branchName
+    value: ${{ parameters.branchName }}
+  - name: prevReleaseBranch
+    value: ${{ parameters.prevReleaseBranch }}
+  - name: githubOwner
+    value: ${{ parameters.githubOwner }}
+  - name: prodActiveRegion
+    value: ${{ parameters.prodActiveRegion }}
   - name: repoList
     value: 'repo-1,repo-2,repo-3,repo-4,repo-5,repo-6,repo-7,repo-8,repo-9,repo-10'
 
