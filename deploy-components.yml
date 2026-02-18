@@ -7,6 +7,9 @@ parameters:
     type: string
   - name: branchName
     type: string
+  - name: region2
+    type: string
+    default: ''
 
 steps:
   - task: PowerShell@2
@@ -322,3 +325,318 @@ steps:
         $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
         if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
         Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  ${{ if ne(parameters.region2, '') }}:
+  - task: PowerShell@2
+    name: ParseArtifact2
+    displayName: 'Parse artifact (phase 2)'
+    inputs:
+      targetType: 'inline'
+      script: |
+        $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        $inArtifact = @{}
+        if (Test-Path $infoFile) {
+          foreach ($line in Get-Content $infoFile) {
+            $parts = $line -split ' - ', 2
+            if ($parts.Count -ge 2) {
+              $repo = $parts[0].Trim()
+              $version = $parts[1].Trim()
+              $inArtifact[$repo] = ($version -ne "NA")
+            }
+          }
+        }
+        foreach ($i in 1..10) {
+          $repo = "repo-$i"
+          $val = if ($inArtifact[$repo]) { "true" } else { "false" }
+          Write-Host "##vso[task.setvariable variable=repo${i}_in_artifact;isOutput=true]$val"
+        }
+  - task: PowerShell@2
+    displayName: 'Deploy repo-1 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo1_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-1"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-2 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo2_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-2"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-3 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo3_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-3"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-4 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo4_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-4"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-5 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo5_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-5"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-6 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo6_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-6"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-7 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo7_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-7"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-8 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo8_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-8"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-9 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo9_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-9"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy repo-10 (phase 2)'
+    condition: eq(variables['ParseArtifact2.repo10_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "repo-10"; $version = ""; $workflowFile = "deploy.yaml"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region2 }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowFile/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  ${{ endif }}
