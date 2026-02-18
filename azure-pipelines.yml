@@ -21,6 +21,7 @@ parameters:
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
+    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
@@ -104,7 +105,10 @@ stages:
                     $refInfo = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/ref/$ref" -Headers $headers -Method Get
                     $sha = $refInfo.object.sha
                   } catch {
-                    if ($_.Exception.Response.StatusCode -eq 404) {
+                    $statusCode = [int]$_.Exception.Response.StatusCode
+                    if ($statusCode -eq 401) {
+                      Write-Error "GitHub returned 401 Unauthorized for $repo. Check: (1) GITHUB_TOKEN is set in Pipeline variables (as a secret). (2) Token is a valid GitHub PAT with 'repo' scope. (3) Token has access to owner '$owner' and repo '$repo'."
+                    } elseif ($statusCode -eq 404) {
                       Write-Error "Previous branch '$prevReleaseBranch' does not exist in $repo. Pipeline failed."
                     } else {
                       throw $_
