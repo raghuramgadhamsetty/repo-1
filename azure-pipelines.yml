@@ -17,9 +17,15 @@ parameters:
     displayName: 'Previous release branch (create new branch from this)'
     type: string
     default: main
+    values:
+      - main
+      - master
+      - BR_01_18
+      - BR_01_27
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
+    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
