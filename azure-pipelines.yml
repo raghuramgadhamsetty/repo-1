@@ -145,6 +145,11 @@ stages:
           runOnce:
             deploy:
               steps:
+                - script: |
+                    $dt = Get-Date -Format "yyyyMMdd-HHmmss"
+                    echo "##vso[task.setvariable variable=ArtifactName;isOutput=true]ci-build-info-$dt"
+                  name: SetArtifactName
+                  displayName: 'Set unique artifact name (date and timestamp)'
                 - task: PowerShell@2
                   displayName: 'Get latest CI run and artifact version from all repos'
                   env:
@@ -258,9 +263,8 @@ stages:
                   displayName: 'Publish build info file'
                   inputs:
                     targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
-                    artifactName: 'ci-build-info'
+                    artifactName: $(SetArtifactName.ArtifactName)
                     publishLocation: 'pipeline'
-                    replaceExisting: true
 
   - stage: Promote
     displayName: 'Promote'
@@ -291,7 +295,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: 'ci-build-info'
+                    artifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -315,7 +319,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: 'ci-build-info'
+                    artifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -342,7 +346,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: 'ci-build-info'
+                    artifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -369,7 +373,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: 'ci-build-info'
+                    artifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
