@@ -1,5 +1,5 @@
 # Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
-# Run this pipeline and provide the branch name when prompted.
+# Run this pipeline and provide the variable group name. All other values (branchName, githubOwner, repo enabled/build version, prodActiveRegion) come from that variable group. Update the variable group in Pipelines > Library to change values when rerunning a stage.
 
 name: ReleasePipeline-$(Build.BuildId)-$(Date:yyyyMMddHHmmss)
 appendCommitMessageToRunName: false
@@ -7,109 +7,12 @@ appendCommitMessageToRunName: false
 trigger: none
 
 parameters:
-  - name: branchName
-    displayName: 'Branch name to create'
+  - name: variableGroupName
+    displayName: 'Variable group name'
     type: string
-  - name: prevReleaseBranch
-    displayName: 'Previous release branch (create new branch from this)'
-    type: string
-    default: main
-    values:
-      - main
-      - master
-  - name: githubOwner
-    displayName: 'GitHub owner/username'
-    type: string
-    default: 'raghuramgadhamsetty'
-  - name: repo1Enabled
-    displayName: 'Component repo-1'
-    type: boolean
-    default: true
-  - name: repo1BuildVersion
-    displayName: 'repo-1 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo2Enabled
-    displayName: 'Component repo-2'
-    type: boolean
-    default: true
-  - name: repo2BuildVersion
-    displayName: 'repo-2 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo3Enabled
-    displayName: 'Component repo-3'
-    type: boolean
-    default: true
-  - name: repo3BuildVersion
-    displayName: 'repo-3 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo4Enabled
-    displayName: 'Component repo-4'
-    type: boolean
-    default: true
-  - name: repo4BuildVersion
-    displayName: 'repo-4 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo5Enabled
-    displayName: 'Component repo-5'
-    type: boolean
-    default: true
-  - name: repo5BuildVersion
-    displayName: 'repo-5 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo6Enabled
-    displayName: 'Component repo-6'
-    type: boolean
-    default: true
-  - name: repo6BuildVersion
-    displayName: 'repo-6 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo7Enabled
-    displayName: 'Component repo-7'
-    type: boolean
-    default: true
-  - name: repo7BuildVersion
-    displayName: 'repo-7 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo8Enabled
-    displayName: 'Component repo-8'
-    type: boolean
-    default: true
-  - name: repo8BuildVersion
-    displayName: 'repo-8 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo9Enabled
-    displayName: 'Component repo-9'
-    type: boolean
-    default: true
-  - name: repo9BuildVersion
-    displayName: 'repo-9 Build version (optional)'
-    type: string
-    default: ' '
-  - name: repo10Enabled
-    displayName: 'Component repo-10'
-    type: boolean
-    default: true
-  - name: repo10BuildVersion
-    displayName: 'repo-10 Build version (optional)'
-    type: string
-    default: ' '
-  - name: prodActiveRegion
-    displayName: 'Prod active region'
-    type: string
-    default: 'EAST-ACTIVE-WEST-PASSIVE'
-    values:
-      - EAST-ACTIVE-WEST-PASSIVE
-      - WEST-ACTIVE-EAST-PASSIVE
 
 variables:
+  - group: ${{ parameters.variableGroupName }}
   - name: repoList
     value: 'repo-1,repo-2,repo-3,repo-4,repo-5,repo-6,repo-7,repo-8,repo-9,repo-10'
 
@@ -123,10 +26,10 @@ stages:
           name: 'Default'
         steps:
           - script: |
-              echo "Branch name: ${{ parameters.branchName }}"
-              echo "Previous release branch: ${{ parameters.prevReleaseBranch }}"
-              echo "GitHub owner: ${{ parameters.githubOwner }}"
-              echo "Components enabled: repo-1=${{ parameters.repo1Enabled }} repo-2=${{ parameters.repo2Enabled }} repo-3=${{ parameters.repo3Enabled }} repo-4=${{ parameters.repo4Enabled }} repo-5=${{ parameters.repo5Enabled }} repo-6=${{ parameters.repo6Enabled }} repo-7=${{ parameters.repo7Enabled }} repo-8=${{ parameters.repo8Enabled }} repo-9=${{ parameters.repo9Enabled }} repo-10=${{ parameters.repo10Enabled }}"
+              echo "Branch name: $(branchName)"
+              echo "Previous release branch: $(prevReleaseBranch)"
+              echo "GitHub owner: $(githubOwner)"
+              echo "Components enabled: repo-1=$(repo1Enabled) repo-2=$(repo2Enabled) repo-3=$(repo3Enabled) repo-4=$(repo4Enabled) repo-5=$(repo5Enabled) repo-6=$(repo6Enabled) repo-7=$(repo7Enabled) repo-8=$(repo8Enabled) repo-9=$(repo9Enabled) repo-10=$(repo10Enabled)"
             displayName: 'Show parameters'
 
   - stage: CreateBranch
@@ -146,9 +49,9 @@ stages:
               targetType: 'inline'
               script: |
                 $ErrorActionPreference = "Stop"
-                $branchName = "${{ parameters.branchName }}"
-                $prevReleaseBranch = "${{ parameters.prevReleaseBranch }}"
-                $owner = "${{ parameters.githubOwner }}"
+                $branchName = "$(branchName)"
+                $prevReleaseBranch = "$(prevReleaseBranch)"
+                $owner = "$(githubOwner)"
                 # Stage 2 only: create branch in all 10 components regardless of enabled/disabled
                 $repos = @("repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6", "repo-7", "repo-8", "repo-9", "repo-10")
                 $baseUrl = "https://api.github.com"
@@ -220,19 +123,19 @@ stages:
                     targetType: 'inline'
                     script: |
                       $ErrorActionPreference = "Stop"
-                      $owner = "${{ parameters.githubOwner }}"
-                      $branchName = "${{ parameters.branchName }}"
+                      $owner = "$(githubOwner)"
+                      $branchName = "$(branchName)"
                       $repos = @()
-                      if ("${{ parameters.repo1Enabled }}" -eq "True") { $repos += "repo-1" }
-                      if ("${{ parameters.repo2Enabled }}" -eq "True") { $repos += "repo-2" }
-                      if ("${{ parameters.repo3Enabled }}" -eq "True") { $repos += "repo-3" }
-                      if ("${{ parameters.repo4Enabled }}" -eq "True") { $repos += "repo-4" }
-                      if ("${{ parameters.repo5Enabled }}" -eq "True") { $repos += "repo-5" }
-                      if ("${{ parameters.repo6Enabled }}" -eq "True") { $repos += "repo-6" }
-                      if ("${{ parameters.repo7Enabled }}" -eq "True") { $repos += "repo-7" }
-                      if ("${{ parameters.repo8Enabled }}" -eq "True") { $repos += "repo-8" }
-                      if ("${{ parameters.repo9Enabled }}" -eq "True") { $repos += "repo-9" }
-                      if ("${{ parameters.repo10Enabled }}" -eq "True") { $repos += "repo-10" }
+                      if ("$(repo1Enabled)" -eq "True") { $repos += "repo-1" }
+                      if ("$(repo2Enabled)" -eq "True") { $repos += "repo-2" }
+                      if ("$(repo3Enabled)" -eq "True") { $repos += "repo-3" }
+                      if ("$(repo4Enabled)" -eq "True") { $repos += "repo-4" }
+                      if ("$(repo5Enabled)" -eq "True") { $repos += "repo-5" }
+                      if ("$(repo6Enabled)" -eq "True") { $repos += "repo-6" }
+                      if ("$(repo7Enabled)" -eq "True") { $repos += "repo-7" }
+                      if ("$(repo8Enabled)" -eq "True") { $repos += "repo-8" }
+                      if ("$(repo9Enabled)" -eq "True") { $repos += "repo-9" }
+                      if ("$(repo10Enabled)" -eq "True") { $repos += "repo-10" }
                       $baseUrl = "https://api.github.com"
                       $outputLines = @()
 
@@ -251,16 +154,16 @@ stages:
                       $branchEncoded = [System.Uri]::EscapeDataString($branchName)
 
                       $buildVersionOverride = @{
-                        "repo-1" = "${{ parameters.repo1BuildVersion }}"
-                        "repo-2" = "${{ parameters.repo2BuildVersion }}"
-                        "repo-3" = "${{ parameters.repo3BuildVersion }}"
-                        "repo-4" = "${{ parameters.repo4BuildVersion }}"
-                        "repo-5" = "${{ parameters.repo5BuildVersion }}"
-                        "repo-6" = "${{ parameters.repo6BuildVersion }}"
-                        "repo-7" = "${{ parameters.repo7BuildVersion }}"
-                        "repo-8" = "${{ parameters.repo8BuildVersion }}"
-                        "repo-9" = "${{ parameters.repo9BuildVersion }}"
-                        "repo-10" = "${{ parameters.repo10BuildVersion }}"
+                        "repo-1" = "$(repo1BuildVersion)"
+                        "repo-2" = "$(repo2BuildVersion)"
+                        "repo-3" = "$(repo3BuildVersion)"
+                        "repo-4" = "$(repo4BuildVersion)"
+                        "repo-5" = "$(repo5BuildVersion)"
+                        "repo-6" = "$(repo6BuildVersion)"
+                        "repo-7" = "$(repo7BuildVersion)"
+                        "repo-8" = "$(repo8BuildVersion)"
+                        "repo-9" = "$(repo9BuildVersion)"
+                        "repo-10" = "$(repo10BuildVersion)"
                       }
 
                       foreach ($repo in $repos) {
@@ -362,8 +265,8 @@ stages:
                 - template: deploy-components.yml
                   parameters:
                     region: 'Stage East'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
 
   - stage: stage_west_deploy
     displayName: 'Stage West Deploy'
@@ -386,8 +289,8 @@ stages:
                 - template: deploy-components.yml
                   parameters:
                     region: 'Stage West'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
 
   - stage: prod_deploy
     displayName: 'Prod Deploy'
@@ -397,7 +300,7 @@ stages:
     jobs:
       - deployment: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
-        condition: eq('${{ parameters.prodActiveRegion }}', 'EAST-ACTIVE-WEST-PASSIVE')
+        condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
         environment: 'deploy-prod'
         pool:
           name: 'Default'
@@ -413,16 +316,16 @@ stages:
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod West'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod East'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
       - deployment: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
-        condition: eq('${{ parameters.prodActiveRegion }}', 'WEST-ACTIVE-EAST-PASSIVE')
+        condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
         environment: 'deploy-prod'
         pool:
           name: 'Default'
@@ -438,10 +341,10 @@ stages:
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod East'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod West'
-                    owner: ${{ parameters.githubOwner }}
-                    branchName: ${{ parameters.branchName }}
+                    owner: $(githubOwner)
+                    branchName: $(branchName)
