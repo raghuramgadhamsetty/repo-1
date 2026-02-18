@@ -149,18 +149,8 @@ stages:
                 $branchName = "${{ parameters.branchName }}"
                 $prevReleaseBranch = "${{ parameters.prevReleaseBranch }}"
                 $owner = "${{ parameters.githubOwner }}"
-                $repos = @()
-                if ("${{ parameters.repo1Enabled }}" -eq "True") { $repos += "repo-1" }
-                if ("${{ parameters.repo2Enabled }}" -eq "True") { $repos += "repo-2" }
-                if ("${{ parameters.repo3Enabled }}" -eq "True") { $repos += "repo-3" }
-                if ("${{ parameters.repo4Enabled }}" -eq "True") { $repos += "repo-4" }
-                if ("${{ parameters.repo5Enabled }}" -eq "True") { $repos += "repo-5" }
-                if ("${{ parameters.repo6Enabled }}" -eq "True") { $repos += "repo-6" }
-                if ("${{ parameters.repo7Enabled }}" -eq "True") { $repos += "repo-7" }
-                if ("${{ parameters.repo8Enabled }}" -eq "True") { $repos += "repo-8" }
-                if ("${{ parameters.repo9Enabled }}" -eq "True") { $repos += "repo-9" }
-                if ("${{ parameters.repo10Enabled }}" -eq "True") { $repos += "repo-10" }
-                if ($repos.Count -eq 0) { Write-Error "At least one component must be enabled." }
+                # Stage 2 only: create branch in all 10 components regardless of enabled/disabled
+                $repos = @("repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6", "repo-7", "repo-8", "repo-9", "repo-10")
                 $baseUrl = "https://api.github.com"
 
                 if (-not $env:GITHUB_TOKEN) {
