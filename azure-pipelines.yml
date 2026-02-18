@@ -85,11 +85,11 @@ parameters:
     displayName: 'pokeman_game Build version (optional)'
     type: string
     default: ' '
-  - name: popeye-service_deploy_enabled
+  - name: popeye_service_deploy_enabled
     displayName: 'Component popeye-service'
     type: boolean
     default: true
-  - name: popeye-service_BuildVersion_override
+  - name: popeye_service_BuildVersion_override
     displayName: 'popeye-service Build version (optional)'
     type: string
     default: ' '
@@ -126,7 +126,7 @@ stages:
               echo "Branch name: ${{ parameters.branchName }}"
               echo "Previous release branch: ${{ parameters.prevReleaseBranch }}"
               echo "GitHub owner: ${{ parameters.githubOwner }}"
-              echo "Components enabled: mario_service=${{ parameters.mario_service_deploy_enabled }} contra_app=${{ parameters.contra_app_deploy_enabled }} bomber_man_service=${{ parameters.bomber_man_service_deploy_enabled }} islander_app_service=${{ parameters.islander_app_service_deploy_enabled }} cricket_app=${{ parameters.cricket_app_deploy_enabled }} checkmate_checkers=${{ parameters.checkmate_checkers_deploy_enabled }} baseball_game_service=${{ parameters.baseball_game_service_deploy_enabled }} pokeman_game=${{ parameters.pokeman_game_deploy_enabled }} popeye-service=${{ parameters.popeye-service_deploy_enabled }} main_terraform=${{ parameters.main_terraform_deploy_enabled }}"
+              echo "Components enabled: mario_service=${{ parameters.mario_service_deploy_enabled }} contra_app=${{ parameters.contra_app_deploy_enabled }} bomber_man_service=${{ parameters.bomber_man_service_deploy_enabled }} islander_app_service=${{ parameters.islander_app_service_deploy_enabled }} cricket_app=${{ parameters.cricket_app_deploy_enabled }} checkmate_checkers=${{ parameters.checkmate_checkers_deploy_enabled }} baseball_game_service=${{ parameters.baseball_game_service_deploy_enabled }} pokeman_game=${{ parameters.pokeman_game_deploy_enabled }} popeye-service=${{ parameters.popeye_service_deploy_enabled }} main_terraform=${{ parameters.main_terraform_deploy_enabled }}"
             displayName: 'Show parameters'
 
   - stage: CreateBranch
@@ -231,7 +231,7 @@ stages:
                       if ("${{ parameters.checkmate_checkers_deploy_enabled }}" -eq "True") { $repos += "checkmate_checkers" }
                       if ("${{ parameters.baseball_game_service_deploy_enabled }}" -eq "True") { $repos += "baseball_game_service" }
                       if ("${{ parameters.pokeman_game_deploy_enabled }}" -eq "True") { $repos += "pokeman_game" }
-                      if ("${{ parameters.popeye-service_deploy_enabled }}" -eq "True") { $repos += "popeye-service" }
+                      if ("${{ parameters.popeye_service_deploy_enabled }}" -eq "True") { $repos += "popeye-service" }
                       if ("${{ parameters.main_terraform_deploy_enabled }}" -eq "True") { $repos += "main_terraform" }
                       $baseUrl = "https://api.github.com"
                       $outputLines = @()
@@ -259,7 +259,7 @@ stages:
                         "checkmate_checkers" = "${{ parameters.checkmate_checkers_BuildVersion_override }}"
                         "baseball_game_service" = "${{ parameters.baseball_game_service_BuildVersion_override }}"
                         "pokeman_game" = "${{ parameters.pokeman_game_BuildVersion_override }}"
-                        "popeye-service" = "${{ parameters.popeye-service_BuildVersion_override }}"
+                        "popeye-service" = "${{ parameters.popeye_service_BuildVersion_override }}"
                         "main_terraform" = "${{ parameters.main_terraform_BuildVersion_override }}"
                       }
 
