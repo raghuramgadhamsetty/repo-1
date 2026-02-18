@@ -17,15 +17,9 @@ parameters:
     displayName: 'Previous release branch (create new branch from this)'
     type: string
     default: main
-    values:
-      - main
-      - master
-      - BR_01_18
-      - BR_01_27
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
-    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
@@ -349,11 +343,13 @@ stages:
                     region: 'Prod West'
                     owner: $(githubOwner)
                     branchName: $(branchName)
+                    includeParse: true
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod East'
                     owner: $(githubOwner)
                     branchName: $(branchName)
+                    includeParse: false
       - deployment: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
         condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
@@ -374,8 +370,10 @@ stages:
                     region: 'Prod East'
                     owner: $(githubOwner)
                     branchName: $(branchName)
+                    includeParse: true
                 - template: deploy-components.yml
                   parameters:
                     region: 'Prod West'
                     owner: $(githubOwner)
                     branchName: $(branchName)
+                    includeParse: false
