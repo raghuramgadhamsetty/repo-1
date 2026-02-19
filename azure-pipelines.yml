@@ -317,15 +317,27 @@ stages:
         dependsOn: WaitForApproval
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Resolve latest ci-build-info artifact name'
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                $buildId = "$(Build.BuildId)"
+                $baseUrl = "$(System.CollectionUri)$(System.TeamProject)/_apis/build/builds/$buildId/artifacts?api-version=6.0"
+                $artifacts = Invoke-RestMethod -Uri $baseUrl -Headers @{ Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN" } -Method Get
+                $ci = $artifacts.value | Where-Object { $_.name -like "ci-build-info-*" } | Sort-Object -Property name -Descending | Select-Object -First 1
+                if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
+                Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
+                Write-Host "Using latest artifact: $($ci.name)"
           - task: DownloadPipelineArtifact@2
             displayName: 'Download ci-build-info artifact'
             inputs:
-              artifactName: $(ciArtifactName)
+              artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
           - template: deploy-components.yml
             parameters:
@@ -355,15 +367,27 @@ stages:
         dependsOn: WaitForApproval
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Resolve latest ci-build-info artifact name'
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                $buildId = "$(Build.BuildId)"
+                $baseUrl = "$(System.CollectionUri)$(System.TeamProject)/_apis/build/builds/$buildId/artifacts?api-version=6.0"
+                $artifacts = Invoke-RestMethod -Uri $baseUrl -Headers @{ Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN" } -Method Get
+                $ci = $artifacts.value | Where-Object { $_.name -like "ci-build-info-*" } | Sort-Object -Property name -Descending | Select-Object -First 1
+                if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
+                Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
+                Write-Host "Using latest artifact: $($ci.name)"
           - task: DownloadPipelineArtifact@2
             displayName: 'Download ci-build-info artifact'
             inputs:
-              artifactName: $(ciArtifactName)
+              artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
           - template: deploy-components.yml
             parameters:
@@ -394,15 +418,27 @@ stages:
         condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Resolve latest ci-build-info artifact name'
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                $buildId = "$(Build.BuildId)"
+                $baseUrl = "$(System.CollectionUri)$(System.TeamProject)/_apis/build/builds/$buildId/artifacts?api-version=6.0"
+                $artifacts = Invoke-RestMethod -Uri $baseUrl -Headers @{ Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN" } -Method Get
+                $ci = $artifacts.value | Where-Object { $_.name -like "ci-build-info-*" } | Sort-Object -Property name -Descending | Select-Object -First 1
+                if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
+                Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
+                Write-Host "Using latest artifact: $($ci.name)"
           - task: DownloadPipelineArtifact@2
             displayName: 'Download ci-build-info artifact'
             inputs:
-              artifactName: $(ciArtifactName)
+              artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
           - template: deploy-components.yml
             parameters:
@@ -422,15 +458,27 @@ stages:
         condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Resolve latest ci-build-info artifact name'
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+            inputs:
+              targetType: 'inline'
+              script: |
+                $buildId = "$(Build.BuildId)"
+                $baseUrl = "$(System.CollectionUri)$(System.TeamProject)/_apis/build/builds/$buildId/artifacts?api-version=6.0"
+                $artifacts = Invoke-RestMethod -Uri $baseUrl -Headers @{ Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN" } -Method Get
+                $ci = $artifacts.value | Where-Object { $_.name -like "ci-build-info-*" } | Sort-Object -Property name -Descending | Select-Object -First 1
+                if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
+                Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
+                Write-Host "Using latest artifact: $($ci.name)"
           - task: DownloadPipelineArtifact@2
             displayName: 'Download ci-build-info artifact'
             inputs:
-              artifactName: $(ciArtifactName)
+              artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
           - template: deploy-components.yml
             parameters:
