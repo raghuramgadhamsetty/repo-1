@@ -304,10 +304,10 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 4320
+        timeoutInMinutes: 1
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1440
+            timeoutInMinutes: 1
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Stage East Deploy. Resume when ready.'
@@ -354,10 +354,10 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 4320
+        timeoutInMinutes: 1
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1440
+            timeoutInMinutes: 1
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Stage West Deploy. Resume when ready.'
@@ -404,10 +404,10 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 4320
+        timeoutInMinutes: 1
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1440
+            timeoutInMinutes: 1
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Prod Deploy. Resume when ready.'
