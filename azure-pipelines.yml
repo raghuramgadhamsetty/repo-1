@@ -56,7 +56,7 @@ stages:
               echo "Branch name: $(branchName)"
               echo "Previous release branch: $(prevReleaseBranch)"
               echo "GitHub owner: $(githubOwner)"
-              echo "Components enabled: mario_service=$(mario_service_deploy_enabled) contra_app=$(contra_app_deploy_enabled) bomber_man_service=$(bomber_man_service_deploy_enabled) islander_app_service=$(islander_app_service_deploy_enabled) cricket_app=$(cricket_app_deploy_enabled) checkmate_checkers=$(checkmate_checkers_deploy_enabled) baseball_game_service=$(baseball_game_service_deploy_enabled) pokeman_game=$(pokeman_game_deploy_enabled) popeye-service=$(popeye_service_deploy_enabled) main_terraform=$(main_terraform_deploy_enabled)"
+              echo "Components enabled: mario_service=$(mario_service_deploy_enabled) contra_app=$(contra_app_deploy_enabled) bomber_man_service=$(bomber_man_service_deploy_enabled) islander_app_service=$(islander_app_service_deploy_enabled) cricket_app=$(cricket_app_deploy_enabled) checkmate_checkers=$(checkmate_checkers_deploy_enabled) baseball_game_service=$(baseball_game_service_deploy_enabled) pokeman_game=$(pokeman_game_deploy_enabled) popeye-service=$(popeye_service_deploy_enabled) main_terraform=$(main_terraform_deploy_enabled)"'
             displayName: 'Show parameters'
 
   - stage: CreateBranch
@@ -291,7 +291,7 @@ stages:
         pool:
           name: 'Default'
         steps:
-          - script: echo "Promote stage - placeholder"
+          - script: echo "Promote stage - placeholder"'
             displayName: 'Promote'
 
   # Deploy stages - each requires manual approval before running. Triggers GitHub Deploy workflow only for repos with build artifacts.
@@ -421,8 +421,9 @@ stages:
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          # 1. Resolve latest ci-build-info artifact name
           - task: PowerShell@2
-            displayName: 'Resolve latest ci-build-info artifact name'
+            displayName: '1. Resolve latest ci-build-info artifact name'
             env:
               SYSTEM_ACCESSTOKEN: $(System.AccessToken)
             inputs:
@@ -435,8 +436,17 @@ stages:
                 if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
                 Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
                 Write-Host "Using latest artifact: $($ci.name)"
+          - script: 'echo "Dummy: Stop db purge pipelines in azure"'
+            displayName: '2. Stop db purge pipelines in azure'
+          - script: 'echo "Dummy: Disable logic apps in east region"'
+            displayName: '3. Disable logic apps in east region'
+          - script: 'echo "Dummy: Run db scripts"'
+            displayName: '4. Run db scripts'
+          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-west"'
+            displayName: '5. Add Azure secrets and vault secrets in prod-west'
+          # 6. Download ci-build-info artifact + deploy-components to Prod West only
           - task: DownloadPipelineArtifact@2
-            displayName: 'Download ci-build-info artifact'
+            displayName: '6. Download ci-build-info artifact'
             inputs:
               artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
@@ -446,12 +456,33 @@ stages:
               owner: $(githubOwner)
               branchName: $(branchName)
               includeParse: true
+          - script: 'echo "Dummy: Enable logic apps in prod-west"'
+            displayName: '7. Enable logic apps in prod-west'
+          - script: 'echo "Dummy: DB failover to prod-west"'
+            displayName: '8. DB failover to prod-west'
+          - script: 'echo "Dummy: Change traffic to prod-west"'
+            displayName: '9. Change traffic to prod-west'
+          - script: 'echo "Dummy: Validations on prod-west"'
+            displayName: '10. Validations on prod-west'
+          - script: 'echo "Dummy: Disable logic apps in west region"'
+            displayName: '11. Disable logic apps in west region'
+          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-east"'
+            displayName: '12. Add Azure secrets and vault secrets in prod-east'
+          # 13. Deploy components to Prod East (artifact already downloaded at step 6)
           - template: deploy-components.yml
             parameters:
               region: 'Prod East'
               owner: $(githubOwner)
               branchName: $(branchName)
               includeParse: false
+          - script: 'echo "Dummy: Enable logic apps in prod-east"'
+            displayName: '14. Enable logic apps in prod-east'
+          - script: 'echo "Dummy: DB failover to prod-east"'
+            displayName: '15. DB failover to prod-east'
+          - script: 'echo "Dummy: Change traffic to prod-east"'
+            displayName: '16. Change traffic to prod-east'
+          - script: 'echo "Dummy: Validations on prod-east"'
+            displayName: '17. Validations on prod-east'
       - job: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
         dependsOn: WaitForApproval
@@ -461,8 +492,9 @@ stages:
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          # 1. Resolve latest ci-build-info artifact name
           - task: PowerShell@2
-            displayName: 'Resolve latest ci-build-info artifact name'
+            displayName: '1. Resolve latest ci-build-info artifact name'
             env:
               SYSTEM_ACCESSTOKEN: $(System.AccessToken)
             inputs:
@@ -475,8 +507,17 @@ stages:
                 if (-not $ci) { Write-Error "No ci-build-info artifact found for build $buildId" }
                 Write-Host "##vso[task.setvariable variable=LatestCiArtifactName]$($ci.name)"
                 Write-Host "Using latest artifact: $($ci.name)"
+          - script: 'echo "Dummy: Stop db purge pipelines in azure"'
+            displayName: '2. Stop db purge pipelines in azure'
+          - script: 'echo "Dummy: Disable logic apps in west region"'
+            displayName: '3. Disable logic apps in west region'
+          - script: 'echo "Dummy: Run db scripts"'
+            displayName: '4. Run db scripts'
+          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-east"'
+            displayName: '5. Add Azure secrets and vault secrets in prod-east'
+          # 6. Download ci-build-info artifact + deploy-components to Prod East only
           - task: DownloadPipelineArtifact@2
-            displayName: 'Download ci-build-info artifact'
+            displayName: '6. Download ci-build-info artifact'
             inputs:
               artifactName: $(LatestCiArtifactName)
               targetPath: '$(Pipeline.Workspace)/ci-build-info'
@@ -486,9 +527,30 @@ stages:
               owner: $(githubOwner)
               branchName: $(branchName)
               includeParse: true
+          - script: 'echo "Dummy: Enable logic apps in prod-east"'
+            displayName: '7. Enable logic apps in prod-east'
+          - script: 'echo "Dummy: DB failover to prod-east"'
+            displayName: '8. DB failover to prod-east'
+          - script: 'echo "Dummy: Change traffic to prod-east"'
+            displayName: '9. Change traffic to prod-east'
+          - script: 'echo "Dummy: Validations on prod-east"'
+            displayName: '10. Validations on prod-east'
+          - script: 'echo "Dummy: Disable logic apps in east region"'
+            displayName: '11. Disable logic apps in east region'
+          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-west"'
+            displayName: '12. Add Azure secrets and vault secrets in prod-west'
+          # 13. Deploy components to Prod West (artifact already downloaded at step 6)
           - template: deploy-components.yml
             parameters:
               region: 'Prod West'
               owner: $(githubOwner)
               branchName: $(branchName)
               includeParse: false
+          - script: 'echo "Dummy: Enable logic apps in prod-west"'
+            displayName: '14. Enable logic apps in prod-west'
+          - script: 'echo "Dummy: DB failover to prod-west"'
+            displayName: '15. DB failover to prod-west'
+          - script: 'echo "Dummy: Change traffic to prod-west"'
+            displayName: '16. Change traffic to prod-west'
+          - script: 'echo "Dummy: Validations on prod-west"'
+            displayName: '17. Validations on prod-west'
