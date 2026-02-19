@@ -311,6 +311,8 @@ stages:
           runOnce:
             deploy:
               steps:
+                - download: none
+                  displayName: 'Disable default artifact download (we download one artifact explicitly)'
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
@@ -351,6 +353,8 @@ stages:
           runOnce:
             deploy:
               steps:
+                - download: none
+                  displayName: 'Disable default artifact download (we download one artifact explicitly)'
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
@@ -422,6 +426,8 @@ stages:
           runOnce:
             deploy:
               steps:
+                - download: none
+                  displayName: 'Disable default artifact download (we download one artifact explicitly)'
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
