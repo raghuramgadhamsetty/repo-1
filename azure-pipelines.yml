@@ -1,6 +1,5 @@
-# Pipeline: Create a branch in all 10 GitHub repos (mario_service, contra_app, ...)
-# Pipeline inputs: variableGroupName, branchName, prevReleaseBranch, githubOwner, prodActiveRegion.
-# Component deploy enabled and BuildVersion override come from the variable group (e.g. RELEASE_03_20).
+# Pipeline: Create a branch in all 10 GitHub repos (repo-1 through repo-10)
+# Pipeline inputs: variable group name, branchName, prevReleaseBranch, githubOwner, prodActiveRegion. Repo enabled/build version come from the variable group.
 
 name: ReleasePipeline-$(Build.BuildId)-$(Date:yyyyMMddHHmmss)
 appendCommitMessageToRunName: false
@@ -18,6 +17,11 @@ parameters:
     displayName: 'Previous release branch (create new branch from this)'
     type: string
     default: main
+    values:
+      - main
+      - master
+      - BR_01_18
+      - BR_01_27
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
@@ -41,7 +45,7 @@ variables:
   - name: prodActiveRegion
     value: ${{ parameters.prodActiveRegion }}
   - name: repoList
-    value: 'mario_service,contra_app,bomber_man_service,islander_app_service,cricket_app,checkmate_checkers,baseball_game_service,pokeman_game,popeye-service,main_terraform'
+    value: 'repo-1,repo-2,repo-3,repo-4,repo-5,repo-6,repo-7,repo-8,repo-9,repo-10'
 
 stages:
   - stage: Validate
@@ -56,7 +60,7 @@ stages:
               echo "Branch name: $(branchName)"
               echo "Previous release branch: $(prevReleaseBranch)"
               echo "GitHub owner: $(githubOwner)"
-              echo "Components enabled: mario_service=$(mario_service_deploy_enabled) contra_app=$(contra_app_deploy_enabled) bomber_man_service=$(bomber_man_service_deploy_enabled) islander_app_service=$(islander_app_service_deploy_enabled) cricket_app=$(cricket_app_deploy_enabled) checkmate_checkers=$(checkmate_checkers_deploy_enabled) baseball_game_service=$(baseball_game_service_deploy_enabled) pokeman_game=$(pokeman_game_deploy_enabled) popeye-service=$(popeye_service_deploy_enabled) main_terraform=$(main_terraform_deploy_enabled)"
+              echo "Components enabled: repo-1=$(repo1Enabled) repo-2=$(repo2Enabled) repo-3=$(repo3Enabled) repo-4=$(repo4Enabled) repo-5=$(repo5Enabled) repo-6=$(repo6Enabled) repo-7=$(repo7Enabled) repo-8=$(repo8Enabled) repo-9=$(repo9Enabled) repo-10=$(repo10Enabled)"
             displayName: 'Show parameters'
 
   - stage: CreateBranch
@@ -64,7 +68,7 @@ stages:
     dependsOn: Validate
     jobs:
       - job: CreateBranchInAllRepos
-        displayName: 'Create branch across all 10 components'
+        displayName: 'Create branch across repo-1 to repo-10'
         pool:
           name: 'Default'
         steps:
@@ -80,7 +84,7 @@ stages:
                 $prevReleaseBranch = "$(prevReleaseBranch)"
                 $owner = "$(githubOwner)"
                 # Stage 2 only: create branch in all 10 components regardless of enabled/disabled
-                $repos = @("mario_service", "contra_app", "bomber_man_service", "islander_app_service", "cricket_app", "checkmate_checkers", "baseball_game_service", "pokeman_game", "popeye-service", "main_terraform")
+                $repos = @("repo-1", "repo-2", "repo-3", "repo-4", "repo-5", "repo-6", "repo-7", "repo-8", "repo-9", "repo-10")
                 $baseUrl = "https://api.github.com"
 
                 if (-not $env:GITHUB_TOKEN) {
@@ -105,10 +109,7 @@ stages:
                     $refInfo = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/ref/$ref" -Headers $headers -Method Get
                     $sha = $refInfo.object.sha
                   } catch {
-                    $statusCode = [int]$_.Exception.Response.StatusCode
-                    if ($statusCode -eq 401) {
-                      Write-Error "GitHub returned 401 Unauthorized for $repo. Check: (1) GITHUB_TOKEN is set in Pipeline variables (as a secret). (2) Token is a valid GitHub PAT with 'repo' scope. (3) Token has access to owner '$owner' and repo '$repo'."
-                    } elseif ($statusCode -eq 404) {
+                    if ($_.Exception.Response.StatusCode -eq 404) {
                       Write-Error "Previous branch '$prevReleaseBranch' does not exist in $repo. Pipeline failed."
                     } else {
                       throw $_
@@ -146,14 +147,6 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  name: SetArtifactName
-                  displayName: 'Set unique artifact name (date and timestamp)'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $dt = Get-Date -Format "yyyyMMdd-HHmmss"
-                      Write-Host "##vso[task.setvariable variable=ArtifactName;isOutput=true]ci-build-info-$dt"
-                - task: PowerShell@2
                   displayName: 'Get latest CI run and artifact version from all repos'
                   env:
                     GITHUB_TOKEN: $(GITHUB_TOKEN)
@@ -164,16 +157,16 @@ stages:
                       $owner = "$(githubOwner)"
                       $branchName = "$(branchName)"
                       $repos = @()
-                      if ("$(mario_service_deploy_enabled)" -eq "True") { $repos += "mario_service" }
-                      if ("$(contra_app_deploy_enabled)" -eq "True") { $repos += "contra_app" }
-                      if ("$(bomber_man_service_deploy_enabled)" -eq "True") { $repos += "bomber_man_service" }
-                      if ("$(islander_app_service_deploy_enabled)" -eq "True") { $repos += "islander_app_service" }
-                      if ("$(cricket_app_deploy_enabled)" -eq "True") { $repos += "cricket_app" }
-                      if ("$(checkmate_checkers_deploy_enabled)" -eq "True") { $repos += "checkmate_checkers" }
-                      if ("$(baseball_game_service_deploy_enabled)" -eq "True") { $repos += "baseball_game_service" }
-                      if ("$(pokeman_game_deploy_enabled)" -eq "True") { $repos += "pokeman_game" }
-                      if ("$(popeye_service_deploy_enabled)" -eq "True") { $repos += "popeye-service" }
-                      if ("$(main_terraform_deploy_enabled)" -eq "True") { $repos += "main_terraform" }
+                      if ("$(repo1Enabled)" -eq "True") { $repos += "repo-1" }
+                      if ("$(repo2Enabled)" -eq "True") { $repos += "repo-2" }
+                      if ("$(repo3Enabled)" -eq "True") { $repos += "repo-3" }
+                      if ("$(repo4Enabled)" -eq "True") { $repos += "repo-4" }
+                      if ("$(repo5Enabled)" -eq "True") { $repos += "repo-5" }
+                      if ("$(repo6Enabled)" -eq "True") { $repos += "repo-6" }
+                      if ("$(repo7Enabled)" -eq "True") { $repos += "repo-7" }
+                      if ("$(repo8Enabled)" -eq "True") { $repos += "repo-8" }
+                      if ("$(repo9Enabled)" -eq "True") { $repos += "repo-9" }
+                      if ("$(repo10Enabled)" -eq "True") { $repos += "repo-10" }
                       $baseUrl = "https://api.github.com"
                       $outputLines = @()
 
@@ -192,16 +185,16 @@ stages:
                       $branchEncoded = [System.Uri]::EscapeDataString($branchName)
 
                       $buildVersionOverride = @{
-                        "mario_service" = "$(mario_service_BuildVersion_override)"
-                        "contra_app" = "$(contra_app_BuildVersion_override)"
-                        "bomber_man_service" = "$(bomber_man_service_BuildVersion_override)"
-                        "islander_app_service" = "$(islander_app_service_BuildVersion_override)"
-                        "cricket_app" = "$(cricket_app_BuildVersion_override)"
-                        "checkmate_checkers" = "$(checkmate_checkers_BuildVersion_override)"
-                        "baseball_game_service" = "$(baseball_game_service_BuildVersion_override)"
-                        "pokeman_game" = "$(pokeman_game_BuildVersion_override)"
-                        "popeye-service" = "$(popeye_service_BuildVersion_override)"
-                        "main_terraform" = "$(main_terraform_BuildVersion_override)"
+                        "repo-1" = "$(repo1BuildVersion)"
+                        "repo-2" = "$(repo2BuildVersion)"
+                        "repo-3" = "$(repo3BuildVersion)"
+                        "repo-4" = "$(repo4BuildVersion)"
+                        "repo-5" = "$(repo5BuildVersion)"
+                        "repo-6" = "$(repo6BuildVersion)"
+                        "repo-7" = "$(repo7BuildVersion)"
+                        "repo-8" = "$(repo8BuildVersion)"
+                        "repo-9" = "$(repo9BuildVersion)"
+                        "repo-10" = "$(repo10BuildVersion)"
                       }
 
                       foreach ($repo in $repos) {
@@ -266,8 +259,9 @@ stages:
                   displayName: 'Publish build info file'
                   inputs:
                     targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
-                    artifactName: $(SetArtifactName.ArtifactName)
+                    artifactName: 'ci-build-info'
                     publishLocation: 'pipeline'
+                    replaceExisting: true
 
   - stage: Promote
     displayName: 'Promote'
@@ -281,32 +275,16 @@ stages:
           - script: echo "Promote stage - placeholder"
             displayName: 'Promote'
 
-  # Deploy stages - each requires manual approval before running. Triggers GitHub Deploy workflow only for repos with build artifacts.
+  # Deploy stages - each has its own approval. Triggers GitHub Deploy workflow only for repos with build artifacts.
   - stage: stage_east_deploy
     displayName: 'Stage East Deploy'
-    dependsOn:
-      - Promote
-      - GatherCIBuildInfo
+    dependsOn: Promote
     jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Stage East Deploy. Resume when ready.'
-              onTimeout: 'reject'
       - deployment: DeployStageEast
         displayName: 'Deploy to Stage East'
-        dependsOn: WaitForApproval
         environment: 'deploy-stage-east'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -314,7 +292,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -324,29 +302,13 @@ stages:
 
   - stage: stage_west_deploy
     displayName: 'Stage West Deploy'
-    dependsOn:
-      - Promote
-      - GatherCIBuildInfo
+    dependsOn: Promote
     jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Stage West Deploy. Resume when ready.'
-              onTimeout: 'reject'
       - deployment: DeployStageWest
         displayName: 'Deploy to Stage West'
-        dependsOn: WaitForApproval
         environment: 'deploy-stage-west'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -354,7 +316,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -365,29 +327,15 @@ stages:
   - stage: prod_deploy
     displayName: 'Prod Deploy'
     dependsOn:
-      - Promote
-      - GatherCIBuildInfo
+      - stage_east_deploy
+      - stage_west_deploy
     jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Prod Deploy. Resume when ready.'
-              onTimeout: 'reject'
       - deployment: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
-        dependsOn: WaitForApproval
         condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
         environment: 'deploy-prod'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -395,7 +343,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -411,13 +359,10 @@ stages:
                     includeParse: false
       - deployment: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
-        dependsOn: WaitForApproval
         condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
         environment: 'deploy-prod'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -425,7 +370,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
