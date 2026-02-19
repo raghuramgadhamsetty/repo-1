@@ -304,10 +304,10 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 1
+        timeoutInMinutes: 4320
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1
+            timeoutInMinutes: 1440
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Stage East Deploy. Resume when ready.'
@@ -354,10 +354,10 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 1
+        timeoutInMinutes: 4320
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1
+            timeoutInMinutes: 1440
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Stage West Deploy. Resume when ready.'
@@ -404,18 +404,18 @@ stages:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 1
+        timeoutInMinutes: 4320
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1
+            timeoutInMinutes: 1440
             inputs:
               notifyUsers: ''
-              instructions: 'Approve to start prod Deploy. Resume when ready.'
+              instructions: 'Approve to start Prod Deploy. Resume when ready.'
               onTimeout: 'reject'
       - job: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
         dependsOn: WaitForApproval
-        condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
+        condition: and(succeeded(), eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE'))
         pool:
           name: 'Default'
         steps:
@@ -486,7 +486,7 @@ stages:
       - job: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
         dependsOn: WaitForApproval
-        condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
+        condition: and(succeeded(), eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE'))
         pool:
           name: 'Default'
         steps:
