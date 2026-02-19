@@ -1,441 +1,362 @@
-# Pipeline: Create a branch in all 10 GitHub repos (mario_service, contra_app, ...)
-# Pipeline inputs: variableGroupName, branchName, prevReleaseBranch, githubOwner, prodActiveRegion.
-# Component deploy enabled and BuildVersion override come from the variable group (e.g. RELEASE_03_20).
-
-name: ReleasePipeline-$(Build.BuildId)-$(Date:yyyyMMddHHmmss)
-appendCommitMessageToRunName: false
-
-trigger: none
-
+# Reusable deploy steps: optionally parse artifact, then run one task per component (skip if not in artifact).
+# Use includeParse: true on first call per job (or single call); use includeParse: false on second call (Prod East after Prod West).
+# All deploy conditions use ParseArtifact.<repo>_in_artifact (e.g. ParseArtifact.mario_service_in_artifact) so one parse per job is enough.
 parameters:
-  - name: variableGroupName
-    displayName: 'Variable group name'
+  - name: region
+    type: string
+  - name: owner
     type: string
   - name: branchName
-    displayName: 'Branch name to create'
     type: string
-  - name: prevReleaseBranch
-    displayName: 'Previous release branch (create new branch from this)'
-    type: string
-    default: main
-  - name: githubOwner
-    displayName: 'GitHub owner/username'
-    type: string
-    default: 'raghuramgadhamsetty'
-  - name: prodActiveRegion
-    displayName: 'Prod active region'
-    type: string
-    default: 'EAST-ACTIVE-WEST-PASSIVE'
-    values:
-      - 'EAST-ACTIVE-WEST-PASSIVE'
-      - 'WEST-ACTIVE-EAST-PASSIVE'
+  - name: includeParse
+    type: boolean
+    default: true
 
-variables:
-  - group: ${{ parameters.variableGroupName }}
-  - name: branchName
-    value: ${{ parameters.branchName }}
-  - name: prevReleaseBranch
-    value: ${{ parameters.prevReleaseBranch }}
-  - name: githubOwner
-    value: ${{ parameters.githubOwner }}
-  - name: prodActiveRegion
-    value: ${{ parameters.prodActiveRegion }}
-  - name: repoList
-    value: 'mario_service,contra_app,bomber_man_service,islander_app_service,cricket_app,checkmate_checkers,baseball_game_service,pokeman_game,popeye-service,main_terraform'
-
-stages:
-  - stage: Validate
-    displayName: 'Validate inputs'
-    jobs:
-      - job: ValidateInputs
-        displayName: 'Check parameters'
-        pool:
-          name: 'Default'
-        steps:
-          - script: |
-              echo "Branch name: $(branchName)"
-              echo "Previous release branch: $(prevReleaseBranch)"
-              echo "GitHub owner: $(githubOwner)"
-              echo "Components enabled: mario_service=$(mario_service_deploy_enabled) contra_app=$(contra_app_deploy_enabled) bomber_man_service=$(bomber_man_service_deploy_enabled) islander_app_service=$(islander_app_service_deploy_enabled) cricket_app=$(cricket_app_deploy_enabled) checkmate_checkers=$(checkmate_checkers_deploy_enabled) baseball_game_service=$(baseball_game_service_deploy_enabled) pokeman_game=$(pokeman_game_deploy_enabled) popeye-service=$(popeye_service_deploy_enabled) main_terraform=$(main_terraform_deploy_enabled)"
-            displayName: 'Show parameters'
-
-  - stage: CreateBranch
-    displayName: 'Create branch in all repos'
-    dependsOn: Validate
-    jobs:
-      - job: CreateBranchInAllRepos
-        displayName: 'Create branch across all 10 components'
-        pool:
-          name: 'Default'
-        steps:
-          - task: PowerShell@2
-            displayName: 'Create branch in all 10 repos'
-            env:
-              GITHUB_TOKEN: $(GITHUB_TOKEN)
-            inputs:
-              targetType: 'inline'
-              script: |
-                $ErrorActionPreference = "Stop"
-                $branchName = "$(branchName)"
-                $prevReleaseBranch = "$(prevReleaseBranch)"
-                $owner = "$(githubOwner)"
-                # Stage 2 only: create branch in all 10 components regardless of enabled/disabled
-                $repos = @("mario_service", "contra_app", "bomber_man_service", "islander_app_service", "cricket_app", "checkmate_checkers", "baseball_game_service", "pokeman_game", "popeye-service", "main_terraform")
-                $baseUrl = "https://api.github.com"
-
-                if (-not $env:GITHUB_TOKEN) {
-                  Write-Error "GITHUB_TOKEN is not set. Add a secret pipeline variable named GITHUB_TOKEN with your GitHub PAT (scope: repo)."
-                }
-                if (-not $branchName) {
-                  Write-Error "Branch name is required. Run the pipeline with the branchName parameter."
-                }
-                if (-not $prevReleaseBranch) {
-                  Write-Error "Previous release branch is required. Run the pipeline with the prevReleaseBranch parameter."
-                }
-
-                $headers = @{
-                  "Authorization" = "token $($env:GITHUB_TOKEN)"
-                  "Accept"        = "application/vnd.github.v3+json"
-                }
-
-                foreach ($repo in $repos) {
-                  try {
-                    # Get previous release branch SHA - fail if branch does not exist
-                    $ref = "heads/" + [System.Uri]::EscapeDataString($prevReleaseBranch)
-                    $refInfo = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/ref/$ref" -Headers $headers -Method Get
-                    $sha = $refInfo.object.sha
-                  } catch {
-                    $statusCode = [int]$_.Exception.Response.StatusCode
-                    if ($statusCode -eq 401) {
-                      Write-Error "GitHub returned 401 Unauthorized for $repo. Check: (1) GITHUB_TOKEN is set in Pipeline variables (as a secret). (2) Token is a valid GitHub PAT with 'repo' scope. (3) Token has access to owner '$owner' and repo '$repo'."
-                    } elseif ($statusCode -eq 404) {
-                      Write-Error "Previous branch '$prevReleaseBranch' does not exist in $repo. Pipeline failed."
-                    } else {
-                      throw $_
-                    }
-                  }
-
-                  try {
-                    # Create new branch from previous release
-                    $body = @{ ref = "refs/heads/$branchName"; sha = $sha } | ConvertTo-Json
-                    Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/git/refs" -Headers $headers -Method Post -Body $body -ContentType "application/json"
-                    Write-Host "Created branch '$branchName' in $repo" -ForegroundColor Green
-                  } catch {
-                    if ($_.Exception.Response.StatusCode -eq 422) {
-                      Write-Host "Branch '$branchName' already exists in $repo (skipped)" -ForegroundColor Yellow
-                    } else {
-                      Write-Host "Failed for $repo : $_" -ForegroundColor Red
-                    }
-                  }
-                }
-                Write-Host "`nDone. Branch '$branchName' is now in all 10 repos." -ForegroundColor Cyan
-
-  # Stage 3: Requires approval before generating artifact.
-  # Create environment 'ci-build-approval' in DevOps (Pipelines > Environments) and add Approvals.
-  - stage: GatherCIBuildInfo
-    displayName: 'Gather CI build info from all repos'
-    dependsOn: CreateBranch
-    jobs:
-      - deployment: GatherBuildInfo
-        displayName: 'Latest CI run and artifact version per repo'
-        environment: 'ci-build-approval'
-        pool:
-          name: 'Default'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: PowerShell@2
-                  name: SetArtifactName
-                  displayName: 'Set unique artifact name (date and timestamp)'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $dt = Get-Date -Format "yyyyMMdd-HHmmss"
-                      Write-Host "##vso[task.setvariable variable=ArtifactName;isOutput=true]ci-build-info-$dt"
-                - task: PowerShell@2
-                  displayName: 'Get latest CI run and artifact version from all repos'
-                  env:
-                    GITHUB_TOKEN: $(GITHUB_TOKEN)
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $ErrorActionPreference = "Stop"
-                      $owner = "$(githubOwner)"
-                      $branchName = "$(branchName)"
-                      $repos = @()
-                      if ("$(mario_service_deploy_enabled)" -eq "True") { $repos += "mario_service" }
-                      if ("$(contra_app_deploy_enabled)" -eq "True") { $repos += "contra_app" }
-                      if ("$(bomber_man_service_deploy_enabled)" -eq "True") { $repos += "bomber_man_service" }
-                      if ("$(islander_app_service_deploy_enabled)" -eq "True") { $repos += "islander_app_service" }
-                      if ("$(cricket_app_deploy_enabled)" -eq "True") { $repos += "cricket_app" }
-                      if ("$(checkmate_checkers_deploy_enabled)" -eq "True") { $repos += "checkmate_checkers" }
-                      if ("$(baseball_game_service_deploy_enabled)" -eq "True") { $repos += "baseball_game_service" }
-                      if ("$(pokeman_game_deploy_enabled)" -eq "True") { $repos += "pokeman_game" }
-                      if ("$(popeye_service_deploy_enabled)" -eq "True") { $repos += "popeye-service" }
-                      if ("$(main_terraform_deploy_enabled)" -eq "True") { $repos += "main_terraform" }
-                      $baseUrl = "https://api.github.com"
-                      $outputLines = @()
-
-                      if (-not $env:GITHUB_TOKEN) {
-                        Write-Error "GITHUB_TOKEN is not set. Add a secret pipeline variable (scope: repo + actions read)."
-                      }
-                      if ($repos.Count -eq 0) {
-                        Write-Error "No components enabled. Enable at least one component for the release."
-                      }
-
-                      $headers = @{
-                        "Authorization" = "token $($env:GITHUB_TOKEN)"
-                        "Accept"        = "application/vnd.github.v3+json"
-                      }
-
-                      $branchEncoded = [System.Uri]::EscapeDataString($branchName)
-
-                      $buildVersionOverride = @{
-                        "mario_service" = "$(mario_service_BuildVersion_override)"
-                        "contra_app" = "$(contra_app_BuildVersion_override)"
-                        "bomber_man_service" = "$(bomber_man_service_BuildVersion_override)"
-                        "islander_app_service" = "$(islander_app_service_BuildVersion_override)"
-                        "cricket_app" = "$(cricket_app_BuildVersion_override)"
-                        "checkmate_checkers" = "$(checkmate_checkers_BuildVersion_override)"
-                        "baseball_game_service" = "$(baseball_game_service_BuildVersion_override)"
-                        "pokeman_game" = "$(pokeman_game_BuildVersion_override)"
-                        "popeye-service" = "$(popeye_service_BuildVersion_override)"
-                        "main_terraform" = "$(main_terraform_BuildVersion_override)"
-                      }
-
-                      foreach ($repo in $repos) {
-                        try {
-                          $override = $buildVersionOverride[$repo]
-                          if ($override -and $override.Trim() -ne "") {
-                            $outputLines += "$repo - $override"
-                            Write-Host "$repo - $override (from input)" -ForegroundColor Green
-                            continue
-                          }
-                          # Get workflow id for CI (ci.yml)
-                          $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
-                          $ciWorkflow = $workflows.workflows | Where-Object { $_.path -like "*ci.yml" } | Select-Object -First 1
-                          if (-not $ciWorkflow) {
-                            $outputLines += "$repo - NA"
-                            Write-Host "$repo - NA (no CI workflow)" -ForegroundColor Yellow
-                            continue
-                          }
-                          $workflowId = $ciWorkflow.id
-                          # Get latest CI workflow runs for the newly created branch only
-                          $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$workflowId/runs?branch=$branchEncoded&per_page=1" -Headers $headers -Method Get
-                          if (-not $runs.workflow_runs -or $runs.workflow_runs.Count -eq 0) {
-                            $outputLines += "$repo - NA"
-                            Write-Host "$repo - NA (no CI run on branch $branchName)" -ForegroundColor Yellow
-                            continue
-                          }
-                          $latestRun = $runs.workflow_runs[0]
-                          $runId = $latestRun.id
-                          $runStatus = $latestRun.status
-                          $runConclusion = $latestRun.conclusion
-
-                          # Get artifacts for latest run on this branch
-                          $artifacts = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/artifacts" -Headers $headers -Method Get
-                          $buildVersion = "NA"
-                          if ($artifacts.artifacts -and $artifacts.artifacts.Count -gt 0) {
-                            $buildArtifact = $artifacts.artifacts | Where-Object { $_.name -match "^build-" } | Select-Object -First 1
-                            if ($buildArtifact) {
-                              $buildVersion = $buildArtifact.name -replace "^build-", ""
-                            } else {
-                              $buildVersion = $artifacts.artifacts[0].name
-                            }
-                          }
-
-                          $line = "$repo - $buildVersion"
-                          $outputLines += $line
-                          Write-Host "$line (run: $runId, status: $runStatus, conclusion: $runConclusion)" -ForegroundColor Green
-                        } catch {
-                          $outputLines += "$repo - NA"
-                          Write-Host "Failed for $repo : $_" -ForegroundColor Red
-                        }
-                      }
-
-                      # Write output file
-                      $outDir = "$(Build.ArtifactStagingDirectory)/ci-build-info"
-                      New-Item -ItemType Directory -Path $outDir -Force | Out-Null
-                      $outFile = Join-Path $outDir "all-repos-build-info.txt"
-                      $outputLines | Set-Content -Path $outFile -Encoding UTF8
-                      Write-Host "`nOutput file: $outFile" -ForegroundColor Cyan
-                      Get-Content $outFile
-
-                - task: PublishPipelineArtifact@1
-                  displayName: 'Publish build info file'
-                  inputs:
-                    targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
-                    artifactName: $(SetArtifactName.ArtifactName)
-                    publishLocation: 'pipeline'
-
-  - stage: Promote
-    displayName: 'Promote'
-    dependsOn: GatherCIBuildInfo
-    jobs:
-      - job: PromoteDummy
-        displayName: 'Promote (dummy)'
-        pool:
-          name: 'Default'
-        steps:
-          - script: echo "Promote stage - placeholder"
-            displayName: 'Promote'
-
-  # Deploy stages - each requires manual approval before running. Triggers GitHub Deploy workflow only for repos with build artifacts.
-  - stage: stage_east_deploy
-    displayName: 'Stage East Deploy'
-    dependsOn:
-      - Promote
-      - GatherCIBuildInfo
-    jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Stage East Deploy. Resume when ready.'
-              onTimeout: 'reject'
-      - deployment: DeployStageEast
-        displayName: 'Deploy to Stage East'
-        dependsOn: WaitForApproval
-        environment: 'deploy-stage-east'
-        pool:
-          name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: DownloadPipelineArtifact@2
-                  displayName: 'Download ci-build-info artifact'
-                  inputs:
-                    artifactName: $(ciArtifactName)
-                    targetPath: '$(Pipeline.Workspace)/ci-build-info'
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Stage East'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-
-  - stage: stage_west_deploy
-    displayName: 'Stage West Deploy'
-    dependsOn:
-      - Promote
-      - GatherCIBuildInfo
-    jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Stage West Deploy. Resume when ready.'
-              onTimeout: 'reject'
-      - deployment: DeployStageWest
-        displayName: 'Deploy to Stage West'
-        dependsOn: WaitForApproval
-        environment: 'deploy-stage-west'
-        pool:
-          name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: DownloadPipelineArtifact@2
-                  displayName: 'Download ci-build-info artifact'
-                  inputs:
-                    artifactName: $(ciArtifactName)
-                    targetPath: '$(Pipeline.Workspace)/ci-build-info'
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Stage West'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-
-  - stage: prod_deploy
-    displayName: 'Prod Deploy'
-    dependsOn:
-      - Promote
-      - GatherCIBuildInfo
-    jobs:
-      - job: WaitForApproval
-        displayName: 'Wait for manual approval'
-        pool: server
-        timeoutInMinutes: 4320
-        steps:
-          - task: ManualValidation@1
-            timeoutInMinutes: 1440
-            inputs:
-              notifyUsers: ''
-              instructions: 'Approve to start Prod Deploy. Resume when ready.'
-              onTimeout: 'reject'
-      - deployment: DeployProdEastActive
-        displayName: 'Prod Deploy (East active, West passive)'
-        dependsOn: WaitForApproval
-        condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
-        environment: 'deploy-prod'
-        pool:
-          name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: DownloadPipelineArtifact@2
-                  displayName: 'Download ci-build-info artifact'
-                  inputs:
-                    artifactName: $(ciArtifactName)
-                    targetPath: '$(Pipeline.Workspace)/ci-build-info'
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Prod West'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-                    includeParse: true
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Prod East'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-                    includeParse: false
-      - deployment: DeployProdWestActive
-        displayName: 'Prod Deploy (West active, East passive)'
-        dependsOn: WaitForApproval
-        condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
-        environment: 'deploy-prod'
-        pool:
-          name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: DownloadPipelineArtifact@2
-                  displayName: 'Download ci-build-info artifact'
-                  inputs:
-                    artifactName: $(ciArtifactName)
-                    targetPath: '$(Pipeline.Workspace)/ci-build-info'
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Prod East'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-                    includeParse: true
-                - template: deploy-components.yml
-                  parameters:
-                    region: 'Prod West'
-                    owner: $(githubOwner)
-                    branchName: $(branchName)
-                    includeParse: false
+steps:
+  - ${{ if eq(parameters.includeParse, true) }}:
+    - task: PowerShell@2
+      name: ParseArtifact
+      displayName: 'Parse artifact – which components to deploy'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+          $inArtifact = @{}
+          if (Test-Path $infoFile) {
+            foreach ($line in Get-Content $infoFile) {
+              $parts = $line -split ' - ', 2
+              if ($parts.Count -ge 2) {
+                $repo = $parts[0].Trim()
+                $version = ($parts[1].Trim())
+                # Only deploy repos that have a real build version in the artifact (not NA, not empty)
+                $inArtifact[$repo] = ($version -and $version -ne "" -and $version -ine "NA")
+              }
+            }
+          }
+          $repoList = @("mario_service", "contra_app", "bomber_man_service", "islander_app_service", "cricket_app", "checkmate_checkers", "baseball_game_service", "pokeman_game", "popeye-service", "main_terraform")
+          foreach ($repo in $repoList) {
+            $varName = ($repo -replace '-','_') + "_in_artifact"
+            $val = if ($inArtifact[$repo]) { "true" } else { "false" }
+            Write-Host "##vso[task.setvariable variable=$varName;isOutput=true]$val"
+            Write-Host "  $repo -> $varName = $val (deploy only if true)"
+          }
+  - task: PowerShell@2
+    displayName: 'Deploy component mario_service in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.mario_service_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "mario_service"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml in .github/workflows. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. URL: $baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches. Ensure workflow has 'workflow_dispatch:' and token has 'workflow' scope. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component contra_app in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.contra_app_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "contra_app"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml in .github/workflows. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component bomber_man_service in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.bomber_man_service_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "bomber_man_service"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component islander_app_service in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.islander_app_service_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "islander_app_service"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component cricket_app in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.cricket_app_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "cricket_app"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component checkmate_checkers in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.checkmate_checkers_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "checkmate_checkers"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component baseball_game_service in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.baseball_game_service_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "baseball_game_service"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component pokeman_game in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.pokeman_game_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "pokeman_game"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component popeye-service in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.popeye_service_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "popeye-service"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+  - task: PowerShell@2
+    displayName: 'Deploy component main_terraform in ${{ parameters.region }}'
+    condition: eq(variables['ParseArtifact.main_terraform_in_artifact'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "main_terraform"; $version = ""; $workflowFileName = "deploy"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"; $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+        foreach ($line in Get-Content $infoFile) { $p = $line -split ' - ', 2; if ($p[0].Trim() -eq $repo -and $p.Count -ge 2) { $version = $p[1].Trim(); break } }
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo. $_" }
+        Write-Host "Triggered $repo ($version) - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  $repo status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+        $zipPath = "$(Pipeline.Workspace)/deploy-logs-$repo.zip"
+        Invoke-WebRequest -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId/logs" -Headers @{ Authorization = "token $($env:GITHUB_TOKEN)" } -OutFile $zipPath -UseBasicParsing
+        $extractPath = "$(Pipeline.Workspace)/deploy-logs-$repo"; Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $logFile = Get-ChildItem -Path $extractPath -Recurse -File | Where-Object { $_.Extension -eq ".txt" } | Sort-Object Length -Descending | Select-Object -First 1
+        if ($logFile) { Get-Content $logFile.FullName -Tail 3 | ForEach-Object { Write-Host "    $_" } }
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue; Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
