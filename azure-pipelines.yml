@@ -293,6 +293,8 @@ stages:
         environment: 'deploy-stage-east'
         pool:
           name: 'Default'
+        variables:
+          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -300,7 +302,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
+                    artifactName: $(ciArtifactName)
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -319,6 +321,8 @@ stages:
         environment: 'deploy-stage-west'
         pool:
           name: 'Default'
+        variables:
+          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -326,7 +330,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
+                    artifactName: $(ciArtifactName)
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -343,10 +347,12 @@ stages:
     jobs:
       - deployment: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
-        condition: eq('${{ parameters.prodActiveRegion }}', 'EAST-ACTIVE-WEST-PASSIVE')
+        condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
         environment: 'deploy-prod'
         pool:
           name: 'Default'
+        variables:
+          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -354,7 +360,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
+                    artifactName: $(ciArtifactName)
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -374,6 +380,8 @@ stages:
         environment: 'deploy-prod'
         pool:
           name: 'Default'
+        variables:
+          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -381,7 +389,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
+                    artifactName: $(ciArtifactName)
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
