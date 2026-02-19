@@ -146,14 +146,6 @@ stages:
             deploy:
               steps:
                 - task: PowerShell@2
-                  name: SetArtifactName
-                  displayName: 'Set unique artifact name (date and timestamp)'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
-                      $dt = Get-Date -Format "yyyyMMdd-HHmmss"
-                      Write-Host "##vso[task.setvariable variable=ArtifactName;isOutput=true]ci-build-info-$dt"
-                - task: PowerShell@2
                   displayName: 'Get latest CI run and artifact version from all repos'
                   env:
                     GITHUB_TOKEN: $(GITHUB_TOKEN)
@@ -161,6 +153,18 @@ stages:
                     targetType: 'inline'
                     script: |
                       $ErrorActionPreference = "Stop"
+                      # Remove old all-repos-build-info.txt if it exists (e.g. from rerun), then create fresh file
+                      $outDir = "$(Build.ArtifactStagingDirectory)/ci-build-info"
+                      $outFile = Join-Path $outDir "all-repos-build-info.txt"
+                      if (Test-Path $outFile) {
+                        Remove-Item $outFile -Force
+                        Write-Host "Removed existing all-repos-build-info.txt" -ForegroundColor Yellow
+                      }
+                      if (Test-Path $outDir) {
+                        Get-ChildItem -Path $outDir -File | Remove-Item -Force
+                        Write-Host "Cleaned existing files in ci-build-info folder" -ForegroundColor Yellow
+                      }
+
                       $owner = "$(githubOwner)"
                       $branchName = "$(branchName)"
                       $repos = @()
@@ -266,8 +270,9 @@ stages:
                   displayName: 'Publish build info file'
                   inputs:
                     targetPath: '$(Build.ArtifactStagingDirectory)/ci-build-info'
-                    artifactName: $(SetArtifactName.ArtifactName)
+                    artifactName: 'ci-build-info'
                     publishLocation: 'pipeline'
+                    replaceExisting: true
 
   - stage: Promote
     displayName: 'Promote'
@@ -305,8 +310,6 @@ stages:
         environment: 'deploy-stage-east'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -316,7 +319,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -347,8 +350,6 @@ stages:
         environment: 'deploy-stage-west'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -358,7 +359,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -390,16 +391,16 @@ stages:
         environment: 'deploy-prod'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
               steps:
+                - download: none
+                  displayName: 'Disable default artifact download (we download one artifact explicitly)'
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
@@ -420,8 +421,6 @@ stages:
         environment: 'deploy-prod'
         pool:
           name: 'Default'
-        variables:
-          ciArtifactName: $[ dependencies.GatherCIBuildInfo.GatherBuildInfo.outputs['SetArtifactName.ArtifactName'] ]
         strategy:
           runOnce:
             deploy:
@@ -431,7 +430,7 @@ stages:
                 - task: DownloadPipelineArtifact@2
                   displayName: 'Download ci-build-info artifact'
                   inputs:
-                    artifactName: $(ciArtifactName)
+                    artifactName: 'ci-build-info'
                     targetPath: '$(Pipeline.Workspace)/ci-build-info'
                 - template: deploy-components.yml
                   parameters:
