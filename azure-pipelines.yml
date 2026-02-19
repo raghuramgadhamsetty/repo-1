@@ -281,15 +281,27 @@ stages:
           - script: echo "Promote stage - placeholder"
             displayName: 'Promote'
 
-  # Deploy stages - each has its own approval. Triggers GitHub Deploy workflow only for repos with build artifacts.
+  # Deploy stages - each requires manual approval before running. Triggers GitHub Deploy workflow only for repos with build artifacts.
   - stage: stage_east_deploy
     displayName: 'Stage East Deploy'
     dependsOn:
       - Promote
       - GatherCIBuildInfo
     jobs:
+      - job: WaitForApproval
+        displayName: 'Wait for manual approval'
+        pool: server
+        timeoutInMinutes: 4320
+        steps:
+          - task: ManualValidation@1
+            timeoutInMinutes: 1440
+            inputs:
+              notifyUsers: ''
+              instructions: 'Approve to start Stage East Deploy. Resume when ready.'
+              onTimeout: 'reject'
       - deployment: DeployStageEast
         displayName: 'Deploy to Stage East'
+        dependsOn: WaitForApproval
         environment: 'deploy-stage-east'
         pool:
           name: 'Default'
@@ -316,8 +328,20 @@ stages:
       - Promote
       - GatherCIBuildInfo
     jobs:
+      - job: WaitForApproval
+        displayName: 'Wait for manual approval'
+        pool: server
+        timeoutInMinutes: 4320
+        steps:
+          - task: ManualValidation@1
+            timeoutInMinutes: 1440
+            inputs:
+              notifyUsers: ''
+              instructions: 'Approve to start Stage West Deploy. Resume when ready.'
+              onTimeout: 'reject'
       - deployment: DeployStageWest
         displayName: 'Deploy to Stage West'
+        dependsOn: WaitForApproval
         environment: 'deploy-stage-west'
         pool:
           name: 'Default'
@@ -341,12 +365,23 @@ stages:
   - stage: prod_deploy
     displayName: 'Prod Deploy'
     dependsOn:
-      - stage_east_deploy
-      - stage_west_deploy
+      - Promote
       - GatherCIBuildInfo
     jobs:
+      - job: WaitForApproval
+        displayName: 'Wait for manual approval'
+        pool: server
+        timeoutInMinutes: 4320
+        steps:
+          - task: ManualValidation@1
+            timeoutInMinutes: 1440
+            inputs:
+              notifyUsers: ''
+              instructions: 'Approve to start Prod Deploy. Resume when ready.'
+              onTimeout: 'reject'
       - deployment: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
+        dependsOn: WaitForApproval
         condition: eq(variables['prodActiveRegion'], 'EAST-ACTIVE-WEST-PASSIVE')
         environment: 'deploy-prod'
         pool:
@@ -376,6 +411,7 @@ stages:
                     includeParse: false
       - deployment: DeployProdWestActive
         displayName: 'Prod Deploy (West active, East passive)'
+        dependsOn: WaitForApproval
         condition: eq(variables['prodActiveRegion'], 'WEST-ACTIVE-EAST-PASSIVE')
         environment: 'deploy-prod'
         pool:
