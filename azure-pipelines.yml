@@ -410,7 +410,7 @@ stages:
             timeoutInMinutes: 1
             inputs:
               notifyUsers: ''
-              instructions: 'Approve to start Prod Deploy. Resume when ready.'
+              instructions: 'Approve to start prod Deploy. Resume when ready.'
               onTimeout: 'reject'
       - job: DeployProdEastActive
         displayName: 'Prod Deploy (East active, West passive)'
