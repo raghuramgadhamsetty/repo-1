@@ -21,7 +21,6 @@ parameters:
   - name: githubOwner
     displayName: 'GitHub owner/username'
     type: string
-    default: 'raghuramgadhamsetty'
   - name: prodActiveRegion
     displayName: 'Prod active region'
     type: string
@@ -29,9 +28,21 @@ parameters:
     values:
       - 'EAST-ACTIVE-WEST-PASSIVE'
       - 'WEST-ACTIVE-EAST-PASSIVE'
+  - name: stageSecretsVariableGroup
+    displayName: 'Set Stage secrets variable group'
+    type: string
+    default: ''
+  - name: prodSecretsVariableGroup
+    displayName: 'Set Prod secrets variable group'
+    type: string
+    default: ''
 
 variables:
   - group: ${{ parameters.variableGroupName }}
+  - name: stageSecretsVariableGroup
+    value: ${{ parameters.stageSecretsVariableGroup }}
+  - name: prodSecretsVariableGroup
+    value: ${{ parameters.prodSecretsVariableGroup }}
   - name: branchName
     value: ${{ parameters.branchName }}
   - name: prevReleaseBranch
@@ -309,6 +320,9 @@ stages:
     dependsOn:
       - Promote
       - GatherCIBuildInfo
+    variables:
+      - ${{ if ne(parameters.stageSecretsVariableGroup, '') }}:
+        - group: ${{ parameters.stageSecretsVariableGroup }}
     jobs:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
@@ -329,6 +343,15 @@ stages:
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Read Stage secrets variable group (placeholder)'
+            condition: ne(variables['stageSecretsVariableGroup'], '')
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Placeholder: Reading secrets from Stage secrets variable group."
+                Write-Host "Group name: $(stageSecretsVariableGroup)"
+                Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           - task: PowerShell@2
             displayName: 'Resolve latest ci-build-info artifact name'
             env:
@@ -359,14 +382,17 @@ stages:
     dependsOn:
       - Promote
       - GatherCIBuildInfo
+    variables:
+      - ${{ if ne(parameters.stageSecretsVariableGroup, '') }}:
+        - group: ${{ parameters.stageSecretsVariableGroup }}
     jobs:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
         pool: server
-        timeoutInMinutes: 4320
+        timeoutInMinutes: 2
         steps:
           - task: ManualValidation@1
-            timeoutInMinutes: 1440
+            timeoutInMinutes: 1
             inputs:
               notifyUsers: ''
               instructions: 'Approve to start Stage West Deploy. Resume when ready.'
@@ -379,6 +405,15 @@ stages:
         steps:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
+          - task: PowerShell@2
+            displayName: 'Read Stage secrets variable group (placeholder)'
+            condition: ne(variables['stageSecretsVariableGroup'], '')
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Placeholder: Reading secrets from Stage secrets variable group."
+                Write-Host "Group name: $(stageSecretsVariableGroup)"
+                Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           - task: PowerShell@2
             displayName: 'Resolve latest ci-build-info artifact name'
             env:
@@ -409,6 +444,9 @@ stages:
     dependsOn:
       - Promote
       - GatherCIBuildInfo
+    variables:
+      - ${{ if ne(parameters.prodSecretsVariableGroup, '') }}:
+        - group: ${{ parameters.prodSecretsVariableGroup }}
     jobs:
       - job: WaitForApproval
         displayName: 'Wait for manual approval'
@@ -451,8 +489,15 @@ stages:
             displayName: '3. Disable logic apps in east region'
           - script: 'echo "Dummy: Run db scripts"'
             displayName: '4. Run db scripts'
-          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-west"'
+          - task: PowerShell@2
             displayName: '5. Add Azure secrets and vault secrets in prod-west'
+            condition: always()
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Placeholder: Reading secrets from Prod secrets variable group (prod-west)."
+                Write-Host "Group name: $(prodSecretsVariableGroup)"
+                Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           # 6. Download ci-build-info artifact + deploy-components to Prod West only
           - task: DownloadPipelineArtifact@2
             displayName: '6. Download ci-build-info artifact'
@@ -532,8 +577,15 @@ stages:
             displayName: '3. Disable logic apps in west region'
           - script: 'echo "Dummy: Run db scripts"'
             displayName: '4. Run db scripts'
-          - script: 'echo "Dummy: Add Azure secrets and vault secrets in prod-east"'
+          - task: PowerShell@2
             displayName: '5. Add Azure secrets and vault secrets in prod-east'
+            condition: always()
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Placeholder: Reading secrets from Prod secrets variable group (prod-east)."
+                Write-Host "Group name: $(prodSecretsVariableGroup)"
+                Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           # 6. Download ci-build-info artifact + deploy-components to Prod East only
           - task: DownloadPipelineArtifact@2
             displayName: '6. Download ci-build-info artifact'
