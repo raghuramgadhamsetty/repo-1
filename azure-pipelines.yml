@@ -268,8 +268,8 @@ stages:
                       }
 
                       if ("$(mario_service_terraform)" -eq "True") {
-                        $outputLines += "mario_service_terraform - true"
-                        Write-Host "mario_service_terraform - true (from variable group)" -ForegroundColor Green
+                        $outputLines += "mario_service_terraform - $branchName"
+                        Write-Host "mario_service_terraform - $branchName (from variable group)" -ForegroundColor Green
                       }
 
                       # Write output file
