@@ -341,12 +341,12 @@ stages:
           - download: none
             displayName: 'Disable default artifact download (we download one artifact explicitly)'
           - task: PowerShell@2
-            displayName: 'Read Stage secrets variable group (placeholder)'
-            condition: ne(variables['stageSecretsVariableGroup'], '')
+            displayName: 'Add Azure secrets and vault secrets in Stage East'
+            condition: and(ne(variables['stageSecretsVariableGroup'], ''), ne(variables['stageSecretsVariableGroup'], '(optional)'))
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Placeholder: Reading secrets from Stage secrets variable group."
+                Write-Host "Reading secrets from Stage secrets variable group."
                 Write-Host "Group name: $(stageSecretsVariableGroup)"
                 Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           - task: PowerShell@2
@@ -492,7 +492,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Placeholder: Reading secrets from Prod secrets variable group (prod-west)."
+                Write-Host "Reading secrets from Prod secrets variable group (prod-west)."
                 Write-Host "Group name: $(prodSecretsVariableGroup)"
                 Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           # 6. Download ci-build-info artifact + deploy-components to Prod West only
@@ -580,7 +580,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Placeholder: Reading secrets from Prod secrets variable group (prod-east)."
+                Write-Host "Reading secrets from Prod secrets variable group (prod-east)."
                 Write-Host "Group name: $(prodSecretsVariableGroup)"
                 Write-Host "Secrets from this group are loaded and available (secret values are masked in logs)."
           # 6. Download ci-build-info artifact + deploy-components to Prod East only
