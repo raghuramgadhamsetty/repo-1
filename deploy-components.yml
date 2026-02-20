@@ -41,6 +41,32 @@ steps:
             Write-Host "  $repo -> $varName = $val (deploy only if true)"
           }
   - task: PowerShell@2
+    displayName: 'Deploy mario_service_terraform in ${{ parameters.region }}'
+    condition: eq(variables['mario_service_terraform_enabled'], 'true')
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo = "mario_service"; $workflowFileName = "terraform"
+        $owner = "${{ parameters.owner }}"; $branchName = "${{ parameters.branchName }}"; $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"
+        $headers = @{ "Authorization" = "token $($env:GITHUB_TOKEN)"; "Accept" = "application/vnd.github.v3+json" }
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $tfWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $tfWf) { Write-Error "Repo $repo : No workflow matching $workflowFileName.yaml/yml in .github/workflows. Add the file and ensure it has 'workflow_dispatch:' under 'on:'." }
+        $body = @{ ref = $branchName } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json" } catch { Write-Error "Dispatch failed for $repo terraform. $_" }
+        Write-Host "Triggered mario_service_terraform - ${region}. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branchName)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do { Start-Sleep -Seconds 10; $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get; Write-Host "  mario_service_terraform status: $($run.status)" } while ($run.status -ne "completed")
+        if ($run.conclusion -ne "success") { Write-Error "Terraform deploy failed for $repo - $($run.conclusion)" }
+        Write-Host "mario_service_terraform completed successfully" -ForegroundColor Green
+  - task: PowerShell@2
     displayName: 'Deploy component mario_service in ${{ parameters.region }}'
     condition: eq(variables['ParseArtifact.mario_service_in_artifact'], 'true')
     env:
