@@ -13,10 +13,7 @@ parameters:
 steps:
   - task: PowerShell@2
     displayName: 'Deploy ${{ parameters.repo }}_terraform in ${{ parameters.region }}'
-    condition: and(
-      ne('${{ parameters.terraformFlagVar }}', ''),
-      eq(variables['${{ parameters.terraformFlagVar }}'], 'true')
-    )
+    condition: and(ne('${{ parameters.terraformFlagVar }}', ''), eq(variables['${{ parameters.terraformFlagVar }}'], 'true'))
     env:
       GITHUB_TOKEN: $(GITHUB_TOKEN)
     inputs:
