@@ -1,0 +1,116 @@
+parameters:
+  - name: region
+    type: string
+  - name: owner
+    type: string
+  - name: branchName
+    type: string
+  - name: repo          # e.g. "mario_service"
+    type: string
+  - name: terraformFlagVar   # e.g. "mario_service_terraform"
+    type: string
+
+steps:
+  - task: PowerShell@2
+    displayName: 'Deploy ${{ parameters.repo }}_terraform in ${{ parameters.region }}'
+    condition: and(ne(parameters.terraformFlagVar, ''), eq(variables[parameters.terraformFlagVar], 'true'))
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo   = "${{ parameters.repo }}"
+        $owner  = "${{ parameters.owner }}"
+        $branch = "${{ parameters.branchName }}"
+        $region = "${{ parameters.region }}"
+        $baseUrl = "https://api.github.com"
+
+        $headers = @{
+          "Authorization" = "token $($env:GITHUB_TOKEN)"
+          "Accept"        = "application/vnd.github.v3+json"
+        }
+
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $tfWf = $workflows.workflows | Where-Object { $_.path -like '*terraform.yml' -or $_.path -like '*terraform.yaml' } | Select-Object -First 1
+        if (-not $tfWf) { Write-Error "Repo $repo : No terraform.yml/terraform.yaml workflow with workflow_dispatch." }
+
+        $body = @{ ref = $branch } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+
+        Write-Host "Triggered $repo terraform - $region. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branch)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do {
+          Start-Sleep -Seconds 10
+          $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get
+          Write-Host "  $repo terraform status: $($run.status)"
+        } while ($run.status -ne "completed")
+
+        if ($run.conclusion -ne "success") { Write-Error "Terraform deploy failed for $repo - $($run.conclusion)" }
+        Write-Host "$repo terraform completed successfully" -ForegroundColor Green
+
+  - task: PowerShell@2
+    displayName: 'Deploy component ${{ parameters.repo }} in ${{ parameters.region }}'
+    env:
+      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    inputs:
+      targetType: 'inline'
+      script: |
+        $ErrorActionPreference = "Stop"
+        $repo   = "${{ parameters.repo }}"
+        $owner  = "${{ parameters.owner }}"
+        $branch = "${{ parameters.branchName }}"
+        $region = "${{ parameters.region }}"
+        $workflowFileName = "deploy"
+        $infoFile = "$(Pipeline.Workspace)/ci-build-info/all-repos-build-info.txt"
+
+        if (-not (Test-Path $infoFile)) {
+          Write-Host "Info file not found, skipping $repo." -ForegroundColor Yellow
+          return
+        }
+
+        $version = $null
+        foreach ($line in Get-Content $infoFile) {
+          $p = $line -split ' - ', 2
+          if ($p.Count -ge 2 -and $p[0].Trim() -eq $repo) {
+            $version = $p[1].Trim()
+            break
+          }
+        }
+
+        if (-not $version -or $version -eq "" -or $version -ieq "NA") {
+          Write-Host "$repo has no deployable version in ci-build-info (NA). Skipping." -ForegroundColor Yellow
+          return
+        }
+
+        $baseUrl = "https://api.github.com"
+        $headers = @{
+          "Authorization" = "token $($env:GITHUB_TOKEN)"
+          "Accept"        = "application/vnd.github.v3+json"
+        }
+
+        $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
+        $deployWf = $workflows.workflows | Where-Object { $_.path -match "$workflowFileName\.(yaml|yml)$" } | Select-Object -First 1
+        if (-not $deployWf) { Write-Error "Repo $repo : No $workflowFileName.yaml/yml workflow with workflow_dispatch." }
+
+        $body = @{ ref = $branch } | ConvertTo-Json
+        Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+
+        Write-Host "Triggered $repo ($version) - $region. Waiting..." -ForegroundColor Green
+        Start-Sleep -Seconds 5
+        $branchEncoded = [System.Uri]::EscapeDataString($branch)
+        $runs = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/runs?branch=$branchEncoded&per_page=5" -Headers $headers -Method Get
+        $runId = $runs.workflow_runs[0].id
+        do {
+          Start-Sleep -Seconds 10
+          $run = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/runs/$runId" -Headers $headers -Method Get
+          Write-Host "  $repo status: $($run.status)"
+        } while ($run.status -ne "completed")
+
+        if ($run.conclusion -ne "success") { Write-Error "Deploy failed $repo - $($run.conclusion)" }
+
+        Write-Host "$repo deploy completed successfully" -ForegroundColor Green
+
