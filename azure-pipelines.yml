@@ -332,13 +332,6 @@ stages:
               notifyUsers: ''
               instructions: 'Approve to start Stage East Deploy. Resume when ready.'
               onTimeout: 'reject'
-          - task: PowerShell@2
-            displayName: 'Stage East: show secrets group'
-            condition: and(ne(variables['stageSecretsVariableGroup'], ''), ne(variables['stageSecretsVariableGroup'], '(optional)'))
-            inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "Stage East secrets variable group: $(stageSecretsVariableGroup)"
       - job: DeployStageEast
         displayName: 'Deploy apps to Stage East'
         dependsOn: WaitForApproval
@@ -391,13 +384,6 @@ stages:
               notifyUsers: ''
               instructions: 'Approve to start Stage West Deploy. Resume when ready.'
               onTimeout: 'reject'
-          - task: PowerShell@2
-            displayName: 'Stage West: show secrets group'
-            condition: and(ne(variables['stageSecretsVariableGroup'], ''), ne(variables['stageSecretsVariableGroup'], '(optional)'))
-            inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "Stage West secrets variable group: $(stageSecretsVariableGroup)"
       - job: DeployStageWest
         displayName: 'Deploy apps to Stage West'
         dependsOn: WaitForApproval
