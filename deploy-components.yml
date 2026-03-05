@@ -151,8 +151,15 @@ steps:
 
         # ============================ PHASE 1: Terraform ============================
         foreach ($c in $components) {
-          $repo = $c.Name
+          $repo  = $c.Name
           $tfVar = $c.TerraformVar
+
+          if ($tfVar) {
+            $rawTfVal = (Get-Item -Path ("Env:" + $tfVar) -ErrorAction SilentlyContinue).Value
+            if (-not $rawTfVal) { $rawTfVal = (Get-Item -Path ("Env:" + $tfVar.ToUpper()) -ErrorAction SilentlyContinue).Value }
+            Write-Host "Terraform param for $repo: var '$tfVar' = '$rawTfVal'"
+          }
+
           if (Get-TerraformEnabled $tfVar) {
             $tfStatus = Invoke-Terraform $repo
             $terraformResults[$repo] = $tfStatus
@@ -193,6 +200,13 @@ steps:
             $body.inputs = $inputs
           }
           $bodyJson = $body | ConvertTo-Json -Depth 10
+
+          # Log the exact params being sent to GitHub
+          $inputsJsonForLog = if ($inputs -ne $null) { $inputs | ConvertTo-Json -Depth 10 } else { "{}" }
+          Write-Host "Dispatching deploy for $repo with:"
+          Write-Host "  ref     : $branch"
+          Write-Host "  version : $version"
+          Write-Host "  inputs  : $inputsJsonForLog"
 
           Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $bodyJson -ContentType "application/json"
 
