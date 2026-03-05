@@ -154,13 +154,13 @@ steps:
           $repo  = $c.Name
           $tfVar = $c.TerraformVar
 
-          if ($tfVar) {
-            $rawTfVal = (Get-Item -Path ("Env:" + $tfVar) -ErrorAction SilentlyContinue).Value
-            if (-not $rawTfVal) { $rawTfVal = (Get-Item -Path ("Env:" + $tfVar.ToUpper()) -ErrorAction SilentlyContinue).Value }
-            Write-Host ("Terraform param for {0}: var '{1}' = '{2}'" -f $repo, $tfVar, $rawTfVal)
-          }
-
           if (Get-TerraformEnabled $tfVar) {
+            if ($tfVar) {
+              $rawTfVal = (Get-Item -Path ("Env:" + $tfVar) -ErrorAction SilentlyContinue).Value
+              if (-not $rawTfVal) { $rawTfVal = (Get-Item -Path ("Env:" + $tfVar.ToUpper()) -ErrorAction SilentlyContinue).Value }
+              Write-Host ("Terraform param for {0}: var '{1}' = '{2}'" -f $repo, $tfVar, $rawTfVal)
+            }
+
             $tfStatus = Invoke-Terraform $repo
             $terraformResults[$repo] = $tfStatus
           } else {
@@ -201,14 +201,21 @@ steps:
           }
           $bodyJson = $body | ConvertTo-Json -Depth 10
 
-          # Log the exact params being sent to GitHub
+          # Log the exact params being sent to GitHub (only for repos we actually deploy)
           $inputsJsonForLog = if ($inputs -ne $null) { $inputs | ConvertTo-Json -Depth 10 } else { "{}" }
           Write-Host "Dispatching deploy for $repo with:"
           Write-Host "  ref     : $branch"
           Write-Host "  version : $version"
           Write-Host "  inputs  : $inputsJsonForLog"
 
-          Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $bodyJson -ContentType "application/json"
+          try {
+            Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $bodyJson -ContentType "application/json"
+          }
+          catch {
+            Write-Host "Failed to dispatch deploy for $repo - $($_.Exception.Message)" -ForegroundColor Red
+            $deployResults[$repo] = "dispatch_failed"
+            continue
+          }
 
           Write-Host "Triggered deploy for $repo ($version) - $region" -ForegroundColor Green
           Start-Sleep -Seconds 5
