@@ -59,6 +59,33 @@ steps:
           @{ Name = "main_terraform";        TerraformVar = "" }
         )
 
+        function Get-DeployInputs([string]$repo, [string]$region, [string]$version) {
+          # Customize per component as needed. Return a hashtable or $null.
+          switch ($repo) {
+            "mario_service" {
+              return @{
+                environment    = $region
+                packageVersion = $version
+              }
+            }
+            "contra_app" {
+              return @{
+                slot           = "blue"
+                trafficPercent = "20"
+              }
+            }
+            "bomber_man_service" {
+              return @{
+                region   = $region
+                buildTag = $version
+              }
+            }
+            default {
+              return $null
+            }
+          }
+        }
+
         $baseUrl = "https://api.github.com"
         $token = $env:GITHUB_TOKEN
         if (-not $token) {
@@ -157,8 +184,17 @@ steps:
             continue
           }
 
-          $body = @{ ref = $branch } | ConvertTo-Json
-          Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+          # Optional workflow_dispatch inputs per component
+          $inputs = Get-DeployInputs -repo $repo -region $region -version $version
+          $body = @{
+            ref = $branch
+          }
+          if ($inputs -ne $null) {
+            $body.inputs = $inputs
+          }
+          $bodyJson = $body | ConvertTo-Json -Depth 10
+
+          Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($deployWf.id)/dispatches" -Headers $headers -Method Post -Body $bodyJson -ContentType "application/json"
 
           Write-Host "Triggered deploy for $repo ($version) - $region" -ForegroundColor Green
           Start-Sleep -Seconds 5
