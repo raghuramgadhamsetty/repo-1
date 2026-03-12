@@ -59,6 +59,16 @@ steps:
           @{ Name = "main_terraform";        TerraformVar = "" }
         )
 
+        function Get-TerraformInputs([string]$repo) {
+          # Optional workflow_dispatch inputs for terraform.yml per repo. Return hashtable or $null.
+          switch ($repo) {
+            "mario_service" { return @{ environment = $region } }
+            "contra_app"    { return @{ environment = $region } }
+            "bomber_man_service" { return @{ region = $region } }
+            default { return $null }
+          }
+        }
+
         function Get-DeployInputs([string]$repo, [string]$region, [string]$version) {
           # Customize per component as needed. Return a hashtable or $null.
           switch ($repo) {
@@ -84,6 +94,14 @@ steps:
               return $null
             }
           }
+        }
+
+        function Get-DeployWorkflowPattern([string]$repo) {
+          # popeye-service, pokeman_game, baseball_game_service use cd.yml; others use deploy.yml
+          if ($repo -in @("popeye-service", "pokeman_game", "baseball_game_service")) {
+            return "cd\.(yaml|yml)$"
+          }
+          return "deploy\.(yaml|yml)$"
         }
 
         $baseUrl = "https://api.github.com"
@@ -115,8 +133,13 @@ steps:
               return "failure"
             }
 
-            $body = @{ ref = $branch } | ConvertTo-Json
-            Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/dispatches" -Headers $headers -Method Post -Body $body -ContentType "application/json"
+            $tfInputs = Get-TerraformInputs -repo $repo
+            $body = @{ ref = $branch }
+            if ($tfInputs -ne $null) {
+              $body.inputs = $tfInputs
+            }
+            $bodyJson = $body | ConvertTo-Json -Depth 10
+            Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows/$($tfWf.id)/dispatches" -Headers $headers -Method Post -Body $bodyJson -ContentType "application/json"
 
             Write-Host "  Triggered terraform for $repo" -ForegroundColor Green
             Start-Sleep -Seconds 5
@@ -184,9 +207,11 @@ steps:
           $version = $versions[$repo]
 
           $workflows = Invoke-RestMethod -Uri "$baseUrl/repos/$owner/$repo/actions/workflows" -Headers $headers -Method Get
-          $deployWf = $workflows.workflows | Where-Object { $_.path -match "deploy\.(yaml|yml)$" } | Select-Object -First 1
+          $deployPattern = Get-DeployWorkflowPattern -repo $repo
+          $deployWf = $workflows.workflows | Where-Object { $_.path -match $deployPattern } | Select-Object -First 1
           if (-not $deployWf) {
-            Write-Host "Repo $repo : no deploy.yaml/yml workflow with workflow_dispatch." -ForegroundColor Red
+            $wfName = if ($repo -in @("popeye-service", "pokeman_game", "baseball_game_service")) { "cd.yaml/yml" } else { "deploy.yaml/yml" }
+            Write-Host ("Repo {0} : no {1} workflow with workflow_dispatch." -f $repo, $wfName) -ForegroundColor Red
             $deployResults[$repo] = "no_workflow"
             continue
           }
